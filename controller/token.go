@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
@@ -208,19 +209,25 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	cleanToken := model.Token{
-		UserId:             c.GetInt("id"),
-		Name:               token.Name,
-		Key:                key,
-		CreatedTime:        common.GetTimestamp(),
-		AccessedTime:       common.GetTimestamp(),
-		ExpiredTime:        token.ExpiredTime,
-		RemainQuota:        token.RemainQuota,
-		UnlimitedQuota:     token.UnlimitedQuota,
-		ModelLimitsEnabled: token.ModelLimitsEnabled,
-		ModelLimits:        token.ModelLimits,
-		AllowIps:           token.AllowIps,
-		Group:              token.Group,
-		CrossGroupRetry:    token.CrossGroupRetry,
+		UserId:               c.GetInt("id"),
+		Name:                 token.Name,
+		Key:                  key,
+		CreatedTime:          common.GetTimestamp(),
+		AccessedTime:         common.GetTimestamp(),
+		ExpiredTime:          token.ExpiredTime,
+		RemainQuota:          token.RemainQuota,
+		UnlimitedQuota:       token.UnlimitedQuota,
+		ModelLimitsEnabled:   token.ModelLimitsEnabled,
+		ModelLimits:          token.ModelLimits,
+		AllowIps:             token.AllowIps,
+		Group:                token.Group,
+		CrossGroupRetry:      token.CrossGroupRetry,
+		RateLimitEnabled:     token.RateLimitEnabled,
+		RateLimitTotal:       token.RateLimitTotal,
+		RateLimitSuccess:     token.RateLimitSuccess,
+		RateLimitPeriod:      token.RateLimitPeriod,
+		ExpiredFromFirstCall: token.ExpiredFromFirstCall,
+		ExpiredDuration:      token.ExpiredDuration,
 	}
 	err = cleanToken.Insert()
 	if err != nil {
@@ -356,4 +363,31 @@ func GetTokenKeysBatch(c *gin.Context) {
 		keysMap[t.Id] = t.GetFullKey()
 	}
 	common.ApiSuccess(c, gin.H{"keys": keysMap})
+}
+
+// GetTokenRateLimitStatus returns current rate limit usage for a token
+func GetTokenRateLimitStatus(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	userId := c.GetInt("id")
+	token, err := model.GetTokenByIds(id, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	status, err := middleware.GetTokenRateLimitStatus(token.Id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	status["enabled"] = token.RateLimitEnabled
+	status["total_limit"] = token.RateLimitTotal
+	status["success_limit"] = token.RateLimitSuccess
+	status["period_seconds"] = token.RateLimitPeriod
+	status["expired_from_first_call"] = token.ExpiredFromFirstCall
+	status["expired_duration"] = token.ExpiredDuration
+	common.ApiSuccess(c, status)
 }

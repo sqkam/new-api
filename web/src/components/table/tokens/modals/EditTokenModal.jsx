@@ -53,6 +53,7 @@ import {
   IconSave,
   IconClose,
   IconKey,
+  IconShield,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../../../context/Status';
@@ -82,6 +83,12 @@ const EditTokenModal = (props) => {
     group: '',
     cross_group_retry: false,
     tokenCount: 1,
+    rate_limit_enabled: false,
+    rate_limit_total: 2200,
+    rate_limit_success: 2000,
+    rate_limit_period: 86400,
+    expired_from_first_call: false,
+    expired_duration: 0,
   });
 
   const handleCancel = () => {
@@ -148,9 +155,6 @@ const EditTokenModal = (props) => {
         }
       }
       setGroups(localGroupOptions);
-      // if (statusState?.status?.default_use_auto_group && formApiRef.current) {
-      //   formApiRef.current.setValue('group', 'auto');
-      // }
     } else {
       showError(t(message));
     }
@@ -227,7 +231,7 @@ const EditTokenModal = (props) => {
         setLoading(false);
         return;
       }
-      if (localInputs.expired_time !== -1) {
+      if (!localInputs.expired_from_first_call && localInputs.expired_time !== -1) {
         let time = Date.parse(localInputs.expired_time);
         if (isNaN(time)) {
           showError(t('过期时间格式错误！'));
@@ -235,6 +239,9 @@ const EditTokenModal = (props) => {
           return;
         }
         localInputs.expired_time = Math.ceil(time / 1000);
+      }
+      if (localInputs.expired_from_first_call) {
+        localInputs.expired_time = -1;
       }
       localInputs.model_limits = localInputs.model_limits.join(',');
       localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
@@ -271,7 +278,7 @@ const EditTokenModal = (props) => {
           break;
         }
 
-        if (localInputs.expired_time !== -1) {
+        if (!localInputs.expired_from_first_call && localInputs.expired_time !== -1) {
           let time = Date.parse(localInputs.expired_time);
           if (isNaN(time)) {
             showError(t('过期时间格式错误！'));
@@ -279,6 +286,9 @@ const EditTokenModal = (props) => {
             break;
           }
           localInputs.expired_time = Math.ceil(time / 1000);
+        }
+        if (localInputs.expired_from_first_call) {
+          localInputs.expired_time = -1;
         }
         localInputs.model_limits = localInputs.model_limits.join(',');
         localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
@@ -425,70 +435,126 @@ const EditTokenModal = (props) => {
                       )}
                     />
                   </Col>
-                  <Col xs={24} sm={24} md={24} lg={10} xl={10}>
-                    <Form.DatePicker
-                      field='expired_time'
-                      label={t('过期时间')}
-                      type='dateTime'
-                      placeholder={t('请选择过期时间')}
-                      rules={[
-                        { required: true, message: t('请选择过期时间') },
-                        {
-                          validator: (rule, value) => {
-                            // 允许 -1 表示永不过期，也允许空值在必填校验时被拦截
-                            if (value === -1 || !value)
-                              return Promise.resolve();
-                            const time = Date.parse(value);
-                            if (isNaN(time)) {
-                              return Promise.reject(t('过期时间格式错误！'));
-                            }
-                            if (time <= Date.now()) {
-                              return Promise.reject(
-                                t('过期时间不能早于当前时间！'),
-                              );
-                            }
-                            return Promise.resolve();
-                          },
-                        },
-                      ]}
-                      showClear
-                      style={{ width: '100%' }}
+                  {/* 过期策略开关 */}
+                  <Col span={24}>
+                    <Form.Switch
+                      field='expired_from_first_call'
+                      label={t('首次调用后生效')}
+                      size='default'
+                      extraText={t('开启后，令牌的过期时间从首次成功调用时开始计算，无需设置过期时间')}
                     />
                   </Col>
-                  <Col xs={24} sm={24} md={24} lg={14} xl={14}>
-                    <Form.Slot label={t('过期时间快捷设置')}>
-                      <Space wrap>
-                        <Button
-                          theme='light'
-                          type='primary'
-                          onClick={() => setExpiredTime(0, 0, 0, 0)}
-                        >
-                          {t('永不过期')}
-                        </Button>
-                        <Button
-                          theme='light'
-                          type='tertiary'
-                          onClick={() => setExpiredTime(1, 0, 0, 0)}
-                        >
-                          {t('一个月')}
-                        </Button>
-                        <Button
-                          theme='light'
-                          type='tertiary'
-                          onClick={() => setExpiredTime(0, 1, 0, 0)}
-                        >
-                          {t('一天')}
-                        </Button>
-                        <Button
-                          theme='light'
-                          type='tertiary'
-                          onClick={() => setExpiredTime(0, 0, 1, 0)}
-                        >
-                          {t('一小时')}
-                        </Button>
-                      </Space>
-                    </Form.Slot>
-                  </Col>
+                  {/* 固定过期时间 - 仅在未开启"首次调用后生效"时显示 */}
+                  {!values.expired_from_first_call && (
+                    <>
+                      <Col xs={24} sm={24} md={24} lg={10} xl={10}>
+                        <Form.DatePicker
+                          field='expired_time'
+                          label={t('过期时间')}
+                          type='dateTime'
+                          placeholder={t('请选择过期时间')}
+                          rules={[
+                            { required: true, message: t('请选择过期时间') },
+                            {
+                              validator: (rule, value) => {
+                                if (value === -1 || !value)
+                                  return Promise.resolve();
+                                const time = Date.parse(value);
+                                if (isNaN(time)) {
+                                  return Promise.reject(t('过期时间格式错误！'));
+                                }
+                                if (time <= Date.now()) {
+                                  return Promise.reject(
+                                    t('过期时间不能早于当前时间！'),
+                                  );
+                                }
+                                return Promise.resolve();
+                              },
+                            },
+                          ]}
+                          showClear
+                          style={{ width: '100%' }}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={24} lg={14} xl={14}>
+                        <Form.Slot label={t('过期时间快捷设置')}>
+                          <Space wrap>
+                            <Button
+                              theme='light'
+                              type='primary'
+                              onClick={() => setExpiredTime(0, 0, 0, 0)}
+                            >
+                              {t('永不过期')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => setExpiredTime(1, 0, 0, 0)}
+                            >
+                              {t('一个月')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => setExpiredTime(0, 1, 0, 0)}
+                            >
+                              {t('一天')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => setExpiredTime(0, 0, 1, 0)}
+                            >
+                              {t('一小时')}
+                            </Button>
+                          </Space>
+                        </Form.Slot>
+                      </Col>
+                    </>
+                  )}
+                  {/* 首次调用后有效时长 - 仅在开启时显示 */}
+                  {values.expired_from_first_call && (
+                    <>
+                      <Col xs={24} sm={24} md={24} lg={10} xl={10}>
+                        <Form.InputNumber
+                          field='expired_duration'
+                          label={t('有效时长（秒）')}
+                          placeholder={t('首次调用后有效时长')}
+                          min={60}
+                          step={3600}
+                          rules={[{ required: true, message: t('请输入有效时长') }]}
+                          style={{ width: '100%' }}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={24} lg={14} xl={14}>
+                        <Form.Slot label={t('快捷设置')}>
+                          <Space wrap>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => formApiRef.current?.setValue('expired_duration', 86400)}
+                            >
+                              {t('一天')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => formApiRef.current?.setValue('expired_duration', 604800)}
+                            >
+                              {t('一周')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => formApiRef.current?.setValue('expired_duration', 2592000)}
+                            >
+                              {t('一个月')}
+                            </Button>
+                          </Space>
+                        </Form.Slot>
+                      </Col>
+                    </>
+                  )}
                   {!isEdit && (
                     <Col span={24}>
                       <Form.InputNumber
@@ -506,6 +572,135 @@ const EditTokenModal = (props) => {
                 </Row>
               </Card>
 
+              {/* 限流设置 */}
+              <Card className='!rounded-2xl shadow-sm border-0'>
+                <div className='flex items-center mb-2'>
+                  <Avatar
+                    size='small'
+                    color='orange'
+                    className='mr-2 shadow-md'
+                  >
+                    <IconShield size={16} />
+                  </Avatar>
+                  <div>
+                    <Text className='text-lg font-medium'>{t('限流设置')}</Text>
+                    <div className='text-xs text-gray-600'>
+                      {t('限制令牌在指定时间窗口内的调用次数')}
+                    </div>
+                  </div>
+                </div>
+                <Row gutter={12}>
+                  <Col span={24}>
+                    <Form.Switch
+                      field='rate_limit_enabled'
+                      label={t('启用限流')}
+                      size='default'
+                      extraText={t('开启后，该令牌的请求将受到调用频率限制')}
+                      onChange={(val) => {
+                        if (val) {
+                          const api = formApiRef.current;
+                          if (api.getValue('rate_limit_total') === 0) {
+                            api.setValue('rate_limit_total', 2200);
+                          }
+                          if (api.getValue('rate_limit_success') === 0) {
+                            api.setValue('rate_limit_success', 2000);
+                          }
+                        }
+                      }}
+                    />
+                  </Col>
+                  {values.rate_limit_enabled && (
+                    <>
+                      <Col xs={24} sm={24} md={24} lg={10} xl={10}>
+                        <Form.InputNumber
+                          field='rate_limit_period'
+                          label={t('限流周期（秒）')}
+                          placeholder={t('限流周期')}
+                          min={60}
+                          step={3600}
+                          rules={[{ required: true, message: t('请输入限流周期') }]}
+                          style={{ width: '100%' }}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={24} lg={14} xl={14}>
+                        <Form.Slot label={t('快捷设置')}>
+                          <Space wrap>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => formApiRef.current?.setValue('rate_limit_period', 86400)}
+                            >
+                              {t('一天')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => formApiRef.current?.setValue('rate_limit_period', 604800)}
+                            >
+                              {t('一周')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => formApiRef.current?.setValue('rate_limit_period', 2592000)}
+                            >
+                              {t('一个月')}
+                            </Button>
+                          </Space>
+                        </Form.Slot>
+                      </Col>
+                      <Col span={24}>
+                        <Form.InputNumber
+                          field='rate_limit_total'
+                          label={t('总调用次数限制')}
+                          placeholder={t('0 = 不限制')}
+                          min={0}
+                          rules={[{ required: true, message: t('请输入总调用次数') }]}
+                          extraText={t('包括成功和失败的请求')}
+                          style={{ width: '100%' }}
+                        />
+                        <Space wrap className='mt-1'>
+                          {[1500, 2000, 2500, 3000].map((v) => (
+                            <Button
+                              key={v}
+                              size='small'
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => formApiRef.current?.setValue('rate_limit_total', v)}
+                            >
+                              {v}
+                            </Button>
+                          ))}
+                        </Space>
+                      </Col>
+                      <Col span={24}>
+                        <Form.InputNumber
+                          field='rate_limit_success'
+                          label={t('成功调用次数限制')}
+                          placeholder={t('0 = 不限制')}
+                          min={0}
+                          rules={[{ required: true, message: t('请输入成功调用次数') }]}
+                          extraText={t('仅计算成功的请求')}
+                          style={{ width: '100%' }}
+                        />
+                        <Space wrap className='mt-1'>
+                          {[1500, 2000, 2500, 3000].map((v) => (
+                            <Button
+                              key={v}
+                              size='small'
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => formApiRef.current?.setValue('rate_limit_success', v)}
+                            >
+                              {v}
+                            </Button>
+                          ))}
+                        </Space>
+                      </Col>
+                    </>
+                  )}
+                </Row>
+              </Card>
               {/* 额度设置 */}
               <Card className='!rounded-2xl shadow-sm border-0'>
                 <div className='flex items-center mb-2'>

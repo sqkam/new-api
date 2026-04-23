@@ -426,6 +426,12 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	}
 	common.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)
 	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
+	c.Set("token_rate_limit_enabled", token.RateLimitEnabled)
+	c.Set("token_rate_limit_total", token.RateLimitTotal)
+	c.Set("token_rate_limit_success", token.RateLimitSuccess)
+	c.Set("token_rate_limit_period", token.RateLimitPeriod)
+	c.Set("token_expired_from_first_call", token.ExpiredFromFirstCall)
+	c.Set("token_expired_duration", token.ExpiredDuration)
 	if len(parts) > 1 {
 		if model.IsAdmin(token.UserId) {
 			c.Set("specific_channel_id", parts[1])

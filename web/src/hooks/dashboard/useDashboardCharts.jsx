@@ -286,7 +286,119 @@ export const useDashboardCharts = (
     },
   });
 
-  // ========== Admin: 用户消耗排行 ==========
+  // ========== Token消耗趋势 ==========
+  const [spec_token_line, setSpecTokenLine] = useState({
+    type: 'bar',
+    data: [
+      {
+        id: 'tokenLineData',
+        values: [],
+      },
+    ],
+    xField: 'Time',
+    yField: 'Tokens',
+    seriesField: 'Model',
+    stack: true,
+    legends: {
+      visible: true,
+      selectMode: 'single',
+    },
+    title: {
+      visible: true,
+      text: t('Token消耗趋势'),
+      subtext: `${t('总计')}：${renderNumber(0)}`,
+    },
+    bar: {
+      state: {
+        hover: {
+          stroke: '#000',
+          lineWidth: 1,
+        },
+      },
+    },
+    tooltip: {
+      mark: {
+        content: [
+          {
+            key: (datum) => datum['Model'],
+            value: (datum) => renderNumber(datum['Tokens']),
+          },
+        ],
+      },
+      dimension: {
+        content: [
+          {
+            key: (datum) => datum['Model'],
+            value: (datum) => datum['Tokens'] || 0,
+          },
+        ],
+        updateContent: (array) => {
+          array.sort((a, b) => b.value - a.value);
+          let sum = 0;
+          for (let i = 0; i < array.length; i++) {
+            let value = parseFloat(array[i].value);
+            if (isNaN(value)) value = 0;
+            sum += value;
+            array[i].value = renderNumber(value);
+          }
+          array.unshift({
+            key: t('总计'),
+            value: renderNumber(sum),
+          });
+          return array;
+        },
+      },
+    },
+    color: {
+      specified: modelColorMap,
+    },
+  });
+
+  // ========== Token消耗排行 ==========
+  const [spec_token_rank_bar, setSpecTokenRankBar] = useState({
+    type: 'bar',
+    data: [
+      {
+        id: 'tokenRankData',
+        values: [],
+      },
+    ],
+    xField: 'Model',
+    yField: 'Tokens',
+    seriesField: 'Model',
+    legends: {
+      visible: true,
+      selectMode: 'single',
+    },
+    title: {
+      visible: true,
+      text: t('Token消耗排行'),
+      subtext: '',
+    },
+    bar: {
+      state: {
+        hover: {
+          stroke: '#000',
+          lineWidth: 1,
+        },
+      },
+    },
+    tooltip: {
+      mark: {
+        content: [
+          {
+            key: (datum) => datum['Model'],
+            value: (datum) => renderNumber(datum['Tokens']),
+          },
+        ],
+      },
+    },
+    color: {
+      specified: modelColorMap,
+    },
+  });
+
+  // ========== 用户消耗排行 ==========
   const [spec_user_rank, setSpecUserRank] = useState({
     type: 'bar',
     data: [{ id: 'userRankData', values: [] }],
@@ -542,6 +654,61 @@ export const useDashboardCharts = (
         'rankData',
       );
 
+      // ===== Token消耗趋势堆叠柱状图 =====
+      let tokenLineData = [];
+      chartTimePoints.forEach((time) => {
+        const timeData = Array.from(uniqueModels).map((model) => {
+          const key = `${time}-${model}`;
+          const aggregated = aggregatedData.get(key);
+          return {
+            Time: time,
+            Model: model,
+            Tokens: aggregated?.tokens || 0,
+          };
+        });
+        tokenLineData.push(...timeData);
+      });
+      tokenLineData.sort((a, b) => a.Time.localeCompare(b.Time));
+
+      // ===== Token消耗排行柱状图 =====
+      const tokenTotals = new Map();
+      for (let [_, value] of aggregatedData) {
+        updateMapValue(tokenTotals, value.model, value.tokens);
+      }
+      const allTokenRankData = Array.from(tokenTotals)
+        .map(([model, tokens]) => ({
+          Model: model,
+          Tokens: tokens,
+        }))
+        .sort((a, b) => b.Tokens - a.Tokens);
+
+      let tokenRankData;
+      if (allTokenRankData.length > MAX_RANK_MODELS) {
+        const topModels = allTokenRankData.slice(0, MAX_RANK_MODELS);
+        const otherTokens = allTokenRankData
+          .slice(MAX_RANK_MODELS)
+          .reduce((sum, item) => sum + item.Tokens, 0);
+        tokenRankData = [...topModels, { Model: t('其他'), Tokens: otherTokens }];
+      } else {
+        tokenRankData = allTokenRankData;
+      }
+
+      updateChartSpec(
+        setSpecTokenLine,
+        tokenLineData,
+        `${t('总计')}：${renderNumber(totalTokens)}`,
+        newModelColors,
+        'tokenLineData',
+      );
+
+      updateChartSpec(
+        setSpecTokenRankBar,
+        tokenRankData,
+        `${t('总计')}：${renderNumber(totalTokens)}`,
+        newModelColors,
+        'tokenRankData',
+      );
+
       setPieData(newPieData);
       setLineData(newLineData);
       setConsumeQuota(totalQuota);
@@ -619,6 +786,8 @@ export const useDashboardCharts = (
     spec_line,
     spec_model_line,
     spec_rank_bar,
+    spec_token_line,
+    spec_token_rank_bar,
     spec_user_rank,
     spec_user_trend,
     updateChartData,

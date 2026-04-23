@@ -12,23 +12,29 @@ import (
 )
 
 type Token struct {
-	Id                 int            `json:"id"`
-	UserId             int            `json:"user_id" gorm:"index"`
-	Key                string         `json:"key" gorm:"type:varchar(128);uniqueIndex"`
-	Status             int            `json:"status" gorm:"default:1"`
-	Name               string         `json:"name" gorm:"index" `
-	CreatedTime        int64          `json:"created_time" gorm:"bigint"`
-	AccessedTime       int64          `json:"accessed_time" gorm:"bigint"`
-	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
-	RemainQuota        int            `json:"remain_quota" gorm:"default:0"`
-	UnlimitedQuota     bool           `json:"unlimited_quota"`
-	ModelLimitsEnabled bool           `json:"model_limits_enabled"`
-	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
-	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
-	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
-	Group              string         `json:"group" gorm:"default:''"`
-	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
-	DeletedAt          gorm.DeletedAt `gorm:"index"`
+	Id                   int            `json:"id"`
+	UserId               int            `json:"user_id" gorm:"index"`
+	Key                  string         `json:"key" gorm:"type:varchar(128);uniqueIndex"`
+	Status               int            `json:"status" gorm:"default:1"`
+	Name                 string         `json:"name" gorm:"index" `
+	CreatedTime          int64          `json:"created_time" gorm:"bigint"`
+	AccessedTime         int64          `json:"accessed_time" gorm:"bigint"`
+	ExpiredTime          int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
+	RemainQuota          int            `json:"remain_quota" gorm:"default:0"`
+	UnlimitedQuota       bool           `json:"unlimited_quota"`
+	ModelLimitsEnabled   bool           `json:"model_limits_enabled"`
+	ModelLimits          string         `json:"model_limits" gorm:"type:text"`
+	AllowIps             *string        `json:"allow_ips" gorm:"default:''"`
+	UsedQuota            int            `json:"used_quota" gorm:"default:0"` // used quota
+	Group                string         `json:"group" gorm:"default:''"`
+	CrossGroupRetry      bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
+	RateLimitEnabled     bool           `json:"rate_limit_enabled" gorm:"default:false"`
+	RateLimitTotal       int            `json:"rate_limit_total" gorm:"default:0"`            // 0 = no limit
+	RateLimitSuccess     int            `json:"rate_limit_success" gorm:"default:0"`          // 0 = no limit
+	RateLimitPeriod      int            `json:"rate_limit_period" gorm:"default:0"`           // seconds
+	ExpiredFromFirstCall bool           `json:"expired_from_first_call" gorm:"default:false"` // 过期时间从首次调用起算
+	ExpiredDuration      int            `json:"expired_duration" gorm:"default:0"`            // 首次调用后过期秒数
+	DeletedAt            gorm.DeletedAt `gorm:"index"`
 }
 
 func (token *Token) Clean() {
@@ -295,7 +301,9 @@ func (token *Token) Update() (err error) {
 		}
 	}()
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error
+		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry",
+		"rate_limit_enabled", "rate_limit_total", "rate_limit_success", "rate_limit_period",
+		"expired_from_first_call", "expired_duration").Updates(token).Error
 	return err
 }
 
@@ -479,6 +487,19 @@ func GetTokenKeysByIds(ids []int, userId int) ([]Token, error) {
 		Where("user_id = ? AND id IN (?)", userId, ids).
 		Find(&tokens).Error
 	return tokens, err
+}
+
+// InvalidateUserTokensCache 清理指定用户所有令牌在 Redis 中的缓存，
+
+// SetTokenExpiredTime updates the token's expiration time in DB and cache
+func SetTokenExpiredTime(tokenId int, expiredTime int64) error {
+	err := DB.Model(&Token{}).Where("id = ?", tokenId).Update("expired_time", expiredTime).Error
+	return err
+}
+
+// CacheDeleteToken removes token from Redis cache (exported for middleware use)
+func CacheDeleteToken(key string) error {
+	return cacheDeleteToken(key)
 }
 
 // InvalidateUserTokensCache 清理指定用户所有令牌在 Redis 中的缓存，
