@@ -2,6 +2,7 @@ FRONTEND_DIR = ./web
 BACKEND_DIR = .
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo "dev")
 DOCKER_IMAGE ?= sqkam/new-api
+PLATFORM ?= linux/amd64
 
 .PHONY: all build build-frontend build-backend docker clean
 
@@ -20,12 +21,12 @@ build-backend: build-frontend
 
 docker-image: build-frontend
 	@echo "Building docker image $(DOCKER_IMAGE)..."
-	docker build . -t $(DOCKER_IMAGE)
+	docker build --platform $(PLATFORM) . -t $(DOCKER_IMAGE)
 	docker push $(DOCKER_IMAGE)
 
 docker: build-frontend
 	@echo "Building docker image $(DOCKER_IMAGE)..."
-	docker build . -t $(DOCKER_IMAGE)
+	docker build --platform $(PLATFORM) . -t $(DOCKER_IMAGE)
 
 clean:
 	@echo "Cleaning..."
