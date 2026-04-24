@@ -89,6 +89,8 @@ const EditTokenModal = (props) => {
     rate_limit_period: 86400,
     expired_from_first_call: false,
     expired_duration: 0,
+    token_count_limit: 0,
+    token_count_limit_m: 0,
   });
 
   const handleCancel = () => {
@@ -176,6 +178,9 @@ const EditTokenModal = (props) => {
       data.remain_amount = Number(
         quotaToDisplayAmount(data.remain_quota || 0).toFixed(6),
       );
+      data.token_count_limit_m = data.token_count_limit
+        ? Number((data.token_count_limit / 1000000).toFixed(4))
+        : 0;
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
       }
@@ -245,6 +250,7 @@ const EditTokenModal = (props) => {
       }
       localInputs.model_limits = localInputs.model_limits.join(',');
       localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+      localInputs.token_count_limit = Math.round((localInputs.token_count_limit_m || 0) * 1000000);
       let res = await API.put(`/api/token/`, {
         ...localInputs,
         id: parseInt(props.editingToken.id),
@@ -292,6 +298,7 @@ const EditTokenModal = (props) => {
         }
         localInputs.model_limits = localInputs.model_limits.join(',');
         localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+        localInputs.token_count_limit = Math.round((localInputs.token_count_limit_m || 0) * 1000000);
         let res = await API.post(`/api/token/`, localInputs);
         const { success, message } = res.data;
         if (success) {
@@ -782,6 +789,32 @@ const EditTokenModal = (props) => {
                         '令牌的额度仅用于限制令牌本身的最大额度使用量，实际的使用受到账户的剩余额度限制',
                       )}
                     />
+                  </Col>
+                  <Col span={24}>
+                    <Form.InputNumber
+                      field='token_count_limit_m'
+                      label={t('Token次数限制(M)')}
+                      placeholder={t('0表示不限制，单位为百万token')}
+                      suffix='M'
+                      min={0}
+                      precision={2}
+                      step={1}
+                      style={{ width: '100%' }}
+                      extraText={t('API Key的总token使用量（prompt+completion）达到此限制后将自动停用，0表示不限制')}
+                    />
+                    <Space wrap className='mt-1'>
+                      {[1, 10, 20, 50, 100].map((v) => (
+                        <Button
+                          key={v}
+                          size='small'
+                          theme='light'
+                          type='tertiary'
+                          onClick={() => formApiRef.current?.setValue('token_count_limit_m', v)}
+                        >
+                            {v}M
+                        </Button>
+                      ))}
+                    </Space>
                   </Col>
                 </Row>
               </Card>

@@ -27,6 +27,7 @@ import {
   showSuccess,
   encodeToBase64,
 } from '../../helpers';
+import { resetTokenUsedCount } from '../../helpers/token';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 import {
@@ -63,6 +64,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
   const [showKeys, setShowKeys] = useState({});
   const [resolvedTokenKeys, setResolvedTokenKeys] = useState({});
   const [loadingTokenKeys, setLoadingTokenKeys] = useState({});
+  const [rateLimitStatuses, setRateLimitStatuses] = useState({});
   const keyRequestsRef = useRef({});
 
   // Form state
@@ -108,10 +110,30 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     const { success, message, data } = res.data;
     if (success) {
       syncPageData(data);
+      fetchRateLimitStatus(data.items || []);
     } else {
       showError(message);
     }
     setLoading(false);
+  };
+
+  const fetchRateLimitStatus = async (tokenList) => {
+    const rlIds = tokenList
+      .filter((t) => t.rate_limit_enabled)
+      .map((t) => t.id);
+    if (rlIds.length === 0) {
+      setRateLimitStatuses({});
+      return;
+    }
+    try {
+      const res = await API.post('/api/token/batch/rate-limit-status', { ids: rlIds });
+      const { success, data } = res.data;
+      if (success && data) {
+        setRateLimitStatuses(data);
+      }
+    } catch {
+      // silently ignore
+    }
   };
 
   // Refresh function
@@ -293,6 +315,16 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     setLoading(false);
   };
 
+  // Reset token used count
+  const resetUsedCount = async (tokenId) => {
+    try {
+      await resetTokenUsedCount(tokenId);
+      showSuccess(t('操作成功完成！'));
+    } catch (err) {
+      showError(err.message);
+    }
+  };
+
   // Search tokens function
   const searchTokens = async (page = 1, size = pageSize) => {
     const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
@@ -313,6 +345,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     if (success) {
       setSearchMode(true);
       syncPageData(data);
+      fetchRateLimitStatus(data.items || []);
     } else {
       showError(message);
     }
@@ -479,6 +512,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     setShowKeys,
     resolvedTokenKeys,
     loadingTokenKeys,
+    rateLimitStatuses,
 
     // Form state
     formApi,
@@ -496,6 +530,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     copyTokenConnectionString,
     onOpenLink,
     manageToken,
+    resetUsedCount,
     searchTokens,
     sortToken,
     handlePageChange,

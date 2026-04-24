@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 )
 
 const (
@@ -274,4 +275,67 @@ func GetTokenRateLimitStatus(tokenId int) (map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// GetTokenRateLimitStatusBatch returns rate limit runtime state for multiple tokens.
+// Returns a map of tokenId -> {total_used, success_used, period_start}.
+func GetTokenRateLimitStatusBatch(tokenIds []int) map[int]map[string]interface{} {
+	result := make(map[int]map[string]interface{})
+	if len(tokenIds) == 0 {
+		return result
+	}
+
+	if common.RedisEnabled {
+		ctx := context.Background()
+		rdb := common.RDB
+		pipe := rdb.Pipeline()
+
+		cmds := make(map[int]*redis.StringStringMapCmd, len(tokenIds))
+		for _, id := range tokenIds {
+			key := fmt.Sprintf("%s%d", tokenRLKeyPrefix, id)
+			cmds[id] = pipe.HGetAll(ctx, key)
+		}
+		pipe.Exec(ctx)
+
+		for id, cmd := range cmds {
+			data, _ := cmd.Result()
+			var total, success int
+			var periodStart int64
+			if v, ok := data["total"]; ok {
+				fmt.Sscanf(v, "%d", &total)
+			}
+			if v, ok := data["success"]; ok {
+				fmt.Sscanf(v, "%d", &success)
+			}
+			if v, ok := data["period_start"]; ok {
+				fmt.Sscanf(v, "%d", &periodStart)
+			}
+			result[id] = map[string]interface{}{
+				"total_used":   total,
+				"success_used": success,
+				"period_start": periodStart,
+			}
+		}
+	} else {
+		tokenRLMutex.Lock()
+		for _, id := range tokenIds {
+			state, ok := tokenRLStore[id]
+			if ok {
+				result[id] = map[string]interface{}{
+					"total_used":   state.Total,
+					"success_used": state.Success,
+					"period_start": state.PeriodStart,
+				}
+			} else {
+				result[id] = map[string]interface{}{
+					"total_used":   0,
+					"success_used": 0,
+					"period_start": int64(0),
+				}
+			}
+		}
+		tokenRLMutex.Unlock()
+	}
+
+	return result
 }

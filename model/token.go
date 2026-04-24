@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
@@ -34,6 +35,8 @@ type Token struct {
 	RateLimitPeriod      int            `json:"rate_limit_period" gorm:"default:0"`           // seconds
 	ExpiredFromFirstCall bool           `json:"expired_from_first_call" gorm:"default:false"` // 过期时间从首次调用起算
 	ExpiredDuration      int            `json:"expired_duration" gorm:"default:0"`            // 首次调用后过期秒数
+	UsedTokenCount       int            `json:"used_token_count" gorm:"default:0"`            // 已使用token总数（prompt+completion）
+	TokenCountLimit      int            `json:"token_count_limit" gorm:"default:0"`           // token使用总数限制，0=不限制
 	DeletedAt            gorm.DeletedAt `gorm:"index"`
 }
 
@@ -222,6 +225,16 @@ func ValidateUserToken(key string) (token *Token, err error) {
 			}
 			return token, ErrTokenInvalid
 		}
+		if token.TokenCountLimit > 0 && token.UsedTokenCount >= token.TokenCountLimit {
+			if !common.RedisEnabled {
+				token.Status = common.TokenStatusExhausted
+				err := token.SelectUpdate()
+				if err != nil {
+					common.SysLog("failed to update token status" + err.Error())
+				}
+			}
+			return token, ErrTokenInvalid
+		}
 		return token, nil
 	}
 	common.SysLog("ValidateUserToken: failed to get token: " + err.Error())
@@ -303,7 +316,7 @@ func (token *Token) Update() (err error) {
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
 		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry",
 		"rate_limit_enabled", "rate_limit_total", "rate_limit_success", "rate_limit_period",
-		"expired_from_first_call", "expired_duration").Updates(token).Error
+		"expired_from_first_call", "expired_duration", "used_token_count", "token_count_limit").Updates(token).Error
 	return err
 }
 
@@ -445,6 +458,35 @@ func CountUserTokens(userId int) (int64, error) {
 	var total int64
 	err := DB.Model(&Token{}).Where("user_id = ?", userId).Count(&total).Error
 	return total, err
+}
+
+func IncrementTokenUsedCount(tokenId int, tokenCount int) error {
+	if tokenCount <= 0 {
+		return nil
+	}
+	if common.BatchUpdateEnabled {
+		addNewRecord(BatchUpdateTypeTokenUsedCount, tokenId, tokenCount)
+		return nil
+	}
+	return incrementTokenUsedCount(tokenId, tokenCount)
+}
+
+func incrementTokenUsedCount(id int, count int) error {
+	return DB.Model(&Token{}).Where("id = ?", id).Updates(
+		map[string]interface{}{
+			"used_token_count": gorm.Expr("used_token_count + ?", count),
+			"accessed_time":    common.GetTimestamp(),
+		},
+	).Error
+}
+
+func ResetTokenUsedTokenCount(tokenId int, tokenKey string) error {
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			_ = cacheSetTokenField(tokenKey, constant.TokenFieldUsedTokenCount, "0")
+		})
+	}
+	return DB.Model(&Token{}).Where("id = ?", tokenId).Update("used_token_count", 0).Error
 }
 
 // BatchDeleteTokens 删除指定用户的一组令牌，返回成功删除数量

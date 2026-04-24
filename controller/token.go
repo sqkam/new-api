@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -228,6 +229,7 @@ func AddToken(c *gin.Context) {
 		RateLimitPeriod:      token.RateLimitPeriod,
 		ExpiredFromFirstCall: token.ExpiredFromFirstCall,
 		ExpiredDuration:      token.ExpiredDuration,
+		TokenCountLimit:      token.TokenCountLimit,
 	}
 	err = cleanToken.Insert()
 	if err != nil {
@@ -288,9 +290,13 @@ func UpdateToken(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgTokenExpiredCannotEnable)
 			return
 		}
-		if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
-			common.ApiErrorI18n(c, i18n.MsgTokenExhaustedCannotEable)
-			return
+		if cleanToken.Status == common.TokenStatusExhausted {
+			quotaExhausted := !cleanToken.UnlimitedQuota && cleanToken.RemainQuota <= 0
+			tokenCountExhausted := cleanToken.TokenCountLimit > 0 && cleanToken.UsedTokenCount >= cleanToken.TokenCountLimit
+			if quotaExhausted || tokenCountExhausted {
+				common.ApiErrorI18n(c, i18n.MsgTokenExhaustedCannotEable)
+				return
+			}
 		}
 	}
 	if statusOnly != "" {
@@ -306,6 +312,7 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.AllowIps = token.AllowIps
 		cleanToken.Group = token.Group
 		cleanToken.CrossGroupRetry = token.CrossGroupRetry
+		cleanToken.TokenCountLimit = token.TokenCountLimit
 	}
 	err = cleanToken.Update()
 	if err != nil {
@@ -316,6 +323,35 @@ func UpdateToken(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data":    buildMaskedTokenResponse(cleanToken),
+	})
+}
+
+func ResetTokenUsedCount(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	userId := c.GetInt("id")
+	token, err := model.GetTokenByIds(id, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	err = model.ResetTokenUsedTokenCount(token.Id, token.Key)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	// Re-evaluate exhausted status: if both quota and token count are OK, re-enable
+	token.UsedTokenCount = 0
+	if token.Status == common.TokenStatusExhausted {
+		quotaOK := token.UnlimitedQuota || token.RemainQuota > 0
+		countOK := token.TokenCountLimit == 0 || token.UsedTokenCount < token.TokenCountLimit
+		if quotaOK && countOK {
+			token.Status = common.TokenStatusEnabled
+			token.SelectUpdate()
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
 	})
 }
 
@@ -390,4 +426,46 @@ func GetTokenRateLimitStatus(c *gin.Context) {
 	status["expired_from_first_call"] = token.ExpiredFromFirstCall
 	status["expired_duration"] = token.ExpiredDuration
 	common.ApiSuccess(c, status)
+}
+
+// BatchGetTokenRateLimitStatus returns rate limit status for multiple tokens
+func BatchGetTokenRateLimitStatus(c *gin.Context) {
+	var req struct {
+		IDs []int `json:"ids"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil || len(req.IDs) == 0 {
+		common.ApiError(c, fmt.Errorf("invalid request"))
+		return
+	}
+	userId := c.GetInt("id")
+
+	var tokens []model.Token
+	if err := model.DB.Select("id", "rate_limit_enabled", "rate_limit_period").
+		Where("user_id = ? AND id IN (?)", userId, req.IDs).
+		Find(&tokens).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	rlTokenIds := make([]int, 0)
+	tokenPeriodMap := make(map[int]int)
+	for _, t := range tokens {
+		if t.RateLimitEnabled {
+			rlTokenIds = append(rlTokenIds, t.Id)
+			tokenPeriodMap[t.Id] = t.RateLimitPeriod
+		}
+	}
+
+	statuses := middleware.GetTokenRateLimitStatusBatch(rlTokenIds)
+
+	for id, status := range statuses {
+		periodStart, _ := status["period_start"].(int64)
+		periodSeconds := tokenPeriodMap[id]
+		if periodStart > 0 && periodSeconds > 0 {
+			status["reset_at"] = time.Unix(periodStart+int64(periodSeconds), 0).Format(time.RFC3339)
+		}
+		statuses[id] = status
+	}
+
+	common.ApiSuccess(c, statuses)
 }

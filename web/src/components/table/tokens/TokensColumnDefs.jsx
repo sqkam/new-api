@@ -357,6 +357,7 @@ const renderOperations = (
   setShowEdit,
   manageToken,
   refresh,
+  resetUsedCount,
   t,
 ) => {
   let chatsArray = [];
@@ -433,6 +434,19 @@ const renderOperations = (
         </Button>
       )}
 
+      {record.used_token_count > 0 && (
+        <Button
+          type='tertiary'
+          size='small'
+          onClick={async () => {
+            await resetUsedCount(record.id);
+            await refresh();
+          }}
+        >
+          {t('重置用量')}
+        </Button>
+      )}
+
       <Button
         type='tertiary'
         size='small'
@@ -479,7 +493,9 @@ export const getTokensColumns = ({
   setEditingToken,
   setShowEdit,
   refresh,
+  resetUsedCount,
   groupRatios = {},
+  rateLimitStatuses = {},
 }) => {
   return [
     {
@@ -498,10 +514,108 @@ export const getTokensColumns = ({
       render: (text, record) => renderQuotaUsage(text, record, t),
     },
     {
+      title: t('Token用量/限制'),
+      key: 'token_count_usage',
+      render: (text, record) => {
+        const used = record.used_token_count || 0;
+        const limit = record.token_count_limit || 0;
+        const formatM = (n) => {
+          const m = n / 1000000;
+          if (m >= 100) return m.toFixed(0);
+          if (m >= 10) return m.toFixed(1);
+          return m.toFixed(2);
+        };
+        if (limit === 0) {
+          return (
+            <div>
+              <div style={{ fontSize: 12, marginBottom: 4, color: 'var(--semi-color-text-1)' }}>
+                {t('已用')} {formatM(used)}M / {t('不限制')}
+              </div>
+              <div style={{ background: 'var(--semi-color-fill-0)', borderRadius: 4, height: 6 }}>
+                <div style={{
+                  background: 'var(--semi-color-primary)',
+                  borderRadius: 4,
+                  height: 6,
+                  width: '100%',
+                  opacity: used > 0 ? 1 : 0.3,
+                  transition: 'width 0.3s',
+                }} />
+              </div>
+            </div>
+          );
+        }
+        const percent = Math.min((used / limit) * 100, 100);
+        return (
+          <div>
+            <div style={{ fontSize: 12, marginBottom: 4 }}>
+              {formatM(used)}M / {formatM(limit)}M
+            </div>
+            <div style={{ background: 'var(--semi-color-fill-0)', borderRadius: 4, height: 6 }}>
+              <div style={{
+                background: percent >= 90 ? '#e74c3c' : percent >= 70 ? '#f39c12' : 'var(--semi-color-primary)',
+                borderRadius: 4,
+                height: 6,
+                width: percent + '%',
+                transition: 'width 0.3s',
+              }} />
+            </div>
+          </div>
+        );
+      },
+    },
+    {
       title: t('分组'),
       dataIndex: 'group',
       key: 'group',
       render: (text, record) => renderGroupColumn(text, record, t, groupRatios),
+    },
+    {
+      title: t('限流信息'),
+      key: 'rate_limit_info',
+      render: (text, record) => {
+        if (!record.rate_limit_enabled) {
+          return <span style={{ color: 'var(--semi-color-text-2)' }}>{t('未启用')}</span>;
+        }
+        const status = rateLimitStatuses[record.id] || {};
+        const totalUsed = status.total_used || 0;
+        const successUsed = status.success_used || 0;
+        const totalLimit = record.rate_limit_total || 0;
+        const successLimit = record.rate_limit_success || 0;
+        const periodSeconds = record.rate_limit_period || 0;
+        const resetAt = status.reset_at || '';
+
+        const formatPeriod = (s) => {
+          if (s >= 86400) return (s / 86400).toFixed(0) + t('天');
+          if (s >= 3600) return (s / 3600).toFixed(0) + t('小时');
+          if (s >= 60) return (s / 60).toFixed(0) + t('分钟');
+          return s + 's';
+        };
+
+        const formatResetAt = (isoStr) => {
+          if (!isoStr) return '-';
+          try {
+            const d = new Date(isoStr);
+            const now = new Date();
+            const diffMs = d - now;
+            if (diffMs <= 0) return t('已重置');
+            const diffMin = Math.floor(diffMs / 60000);
+            if (diffMin < 60) return diffMin + t('分钟后重置');
+            const diffH = Math.floor(diffMin / 60);
+            if (diffH < 24) return diffH + t('小时后重置');
+            return Math.floor(diffH / 24) + t('天后重置');
+          } catch {
+            return '-';
+          }
+        };
+
+        return (
+          <div style={{ fontSize: 12, lineHeight: '1.6' }}>
+            <div>{t('周期')}: {formatPeriod(periodSeconds)}</div>
+            <div>{t('总调用')}: {totalUsed}{totalLimit > 0 ? `/${totalLimit}` : ''} {t('成功')}: {successUsed}{successLimit > 0 ? `/${successLimit}` : ''}</div>
+            <div style={{ color: 'var(--semi-color-text-2)' }}>{formatResetAt(resetAt)}</div>
+          </div>
+        );
+      },
     },
     {
       title: t('密钥'),
@@ -567,6 +681,7 @@ export const getTokensColumns = ({
           setShowEdit,
           manageToken,
           refresh,
+          resetUsedCount,
           t,
         ),
     },

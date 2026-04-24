@@ -45,11 +45,13 @@ const TokensTable = (tokensData) => {
     copyTokenKey,
     copyTokenConnectionString,
     manageToken,
+    resetUsedCount,
     onOpenLink,
     setEditingToken,
     setShowEdit,
     refresh,
     groupRatios,
+    rateLimitStatuses,
     t,
   } = tokensData;
 
@@ -64,11 +66,13 @@ const TokensTable = (tokensData) => {
       copyTokenKey,
       copyTokenConnectionString,
       manageToken,
+      resetUsedCount,
       onOpenLink,
       setEditingToken,
       setShowEdit,
       refresh,
       groupRatios,
+      rateLimitStatuses,
     });
   }, [
     t,
@@ -79,11 +83,13 @@ const TokensTable = (tokensData) => {
     copyTokenKey,
     copyTokenConnectionString,
     manageToken,
+    resetUsedCount,
     onOpenLink,
     setEditingToken,
     setShowEdit,
     refresh,
     groupRatios,
+    rateLimitStatuses,
   ]);
 
   // Handle compact mode by removing fixed positioning

@@ -72,6 +72,19 @@ export async function fetchTokenKeys() {
 }
 
 /**
+ * 重置令牌的已使用 token 计数
+ * @param {number|string} tokenId
+ * @returns {Promise<void>}
+ */
+export async function resetTokenUsedCount(tokenId) {
+  const response = await API.post(`/api/token/${tokenId}/reset_used_count`);
+  const { success, message } = response.data || {};
+  if (!success) {
+    throw new Error(message || 'Failed to reset token used count');
+  }
+}
+
+/**
  * 获取服务器地址
  * @returns {string} 服务器地址
  */

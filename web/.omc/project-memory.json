@@ -1,0 +1,201 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1776965887626,
+  "projectRoot": "/Users/sqkam/temp/new-api-sqkam/web",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "JavaScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "jsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "5.2.0",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite",
+      "build": "vite build",
+      "lint": "prettier . --check",
+      "lint:fix": "prettier . --write",
+      "eslint": "bunx eslint \"**/*.{js,jsx}\" --cache",
+      "eslint:fix": "bunx eslint \"**/*.{js,jsx}\" --fix --cache",
+      "preview": "vite preview",
+      "i18n:extract": "bunx i18next-cli extract",
+      "i18n:status": "bunx i18next-cli status",
+      "i18n:sync": "bunx i18next-cli sync",
+      "i18n:lint": "bunx i18next-cli lint"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "public",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 10,
+      "lastAccessed": 1776965887617,
+      "keyFiles": [
+        "azure_model_name.png",
+        "cover-4.webp",
+        "favicon.ico",
+        "index.html",
+        "logo.png"
+      ]
+    },
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 9,
+      "lastAccessed": 1776965887617,
+      "keyFiles": [
+        "azure_model_name.png",
+        "cover-4.webp",
+        "favicon.ico",
+        "logo.png",
+        "pay-apple.png"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 3,
+      "lastAccessed": 1776965887619,
+      "keyFiles": [
+        "App.jsx",
+        "index.css",
+        "index.jsx"
+      ]
+    },
+    "dist/assets": {
+      "path": "dist/assets",
+      "purpose": "Static assets",
+      "fileCount": 117,
+      "lastAccessed": 1776965887619,
+      "keyFiles": [
+        "IllustrationConstruction-BfOYqVqj.js",
+        "KaTeX_AMS-Regular-BQhdFMY1.woff2",
+        "KaTeX_AMS-Regular-DMm9YOAa.woff"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 0,
+      "lastAccessed": 1776965887620,
+      "keyFiles": []
+    },
+    "src/helpers": {
+      "path": "src/helpers",
+      "purpose": "Helper functions",
+      "fileCount": 17,
+      "lastAccessed": 1776965887620,
+      "keyFiles": [
+        "api.js",
+        "auth.jsx",
+        "base64.js"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/hooks/tokens/useTokensData.jsx",
+      "accessCount": 11,
+      "lastAccessed": 1776995389724,
+      "type": "file"
+    },
+    {
+      "path": "src/components/table/tokens/TokensColumnDefs.jsx",
+      "accessCount": 7,
+      "lastAccessed": 1776966004567,
+      "type": "file"
+    },
+    {
+      "path": "src/helpers/token.js",
+      "accessCount": 3,
+      "lastAccessed": 1776965959959,
+      "type": "file"
+    },
+    {
+      "path": "src/components/table/tokens/TokensTable.jsx",
+      "accessCount": 3,
+      "lastAccessed": 1776966033562,
+      "type": "file"
+    },
+    {
+      "path": "src/i18n/locales/zh-CN.json",
+      "accessCount": 2,
+      "lastAccessed": 1776966109630,
+      "type": "file"
+    },
+    {
+      "path": "src/i18n/locales/en.json",
+      "accessCount": 2,
+      "lastAccessed": 1776966121023,
+      "type": "file"
+    },
+    {
+      "path": "src/helpers/api.js",
+      "accessCount": 1,
+      "lastAccessed": 1776965933851,
+      "type": "file"
+    },
+    {
+      "path": "src/components/table/tokens/index.jsx",
+      "accessCount": 1,
+      "lastAccessed": 1776966044053,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

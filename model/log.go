@@ -202,6 +202,13 @@ type RecordConsumeLogParams struct {
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
+	// Token count increment — MUST execute even when logging is disabled
+	if params.TokenId > 0 && params.PromptTokens+params.CompletionTokens > 0 {
+		if err := IncrementTokenUsedCount(params.TokenId, params.PromptTokens+params.CompletionTokens); err != nil {
+			common.SysLog("failed to increment token used count: " + err.Error())
+		}
+	}
+
 	if !common.LogConsumeEnabled {
 		return
 	}
