@@ -1,12 +1,13 @@
 FRONTEND_DIR = ./web
 BACKEND_DIR = .
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo "dev")
+DOCKER_IMAGE ?= sqkam/new-api
 
-.PHONY: all build build-frontend build-backend start clean
+.PHONY: all build build-frontend build-backend docker clean
 
 all: build
 
-build: build-frontend build-backend
+build: build-frontend build-backend docker-image
 	@echo "Build complete (version: $(VERSION))"
 
 build-frontend:
@@ -17,9 +18,14 @@ build-backend: build-frontend
 	@echo "Building backend..."
 	@cd $(BACKEND_DIR) && CGO_ENABLED=1 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o new-api .
 
-start:
-	@echo "Starting backend dev server..."
-	@cd $(BACKEND_DIR) && go run main.go
+docker-image: build-frontend
+	@echo "Building docker image $(DOCKER_IMAGE)..."
+	docker build . -t $(DOCKER_IMAGE)
+	docker push $(DOCKER_IMAGE)
+
+docker: build-frontend
+	@echo "Building docker image $(DOCKER_IMAGE)..."
+	docker build . -t $(DOCKER_IMAGE)
 
 clean:
 	@echo "Cleaning..."
