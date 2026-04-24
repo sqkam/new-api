@@ -313,6 +313,12 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.Group = token.Group
 		cleanToken.CrossGroupRetry = token.CrossGroupRetry
 		cleanToken.TokenCountLimit = token.TokenCountLimit
+		cleanToken.RateLimitEnabled = token.RateLimitEnabled
+		cleanToken.RateLimitTotal = token.RateLimitTotal
+		cleanToken.RateLimitSuccess = token.RateLimitSuccess
+		cleanToken.RateLimitPeriod = token.RateLimitPeriod
+		cleanToken.ExpiredFromFirstCall = token.ExpiredFromFirstCall
+		cleanToken.ExpiredDuration = token.ExpiredDuration
 	}
 	err = cleanToken.Update()
 	if err != nil {
