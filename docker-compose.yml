@@ -27,6 +27,7 @@ services:
       - ERROR_LOG_ENABLED=true
       - BATCH_UPDATE_ENABLED=true
       - NODE_NAME=new-api-node-1
+      - RELAY_TIMEOUT=60
     depends_on:
       - redis
     networks:
