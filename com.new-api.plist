@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 服务标识，安装后可通过 launchctl 管理 -->
+    <key>Label</key>
+    <string>com.new-api</string>
+
+    <!-- 要执行的程序路径（编译后的 new-api 二进制文件） -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/new-api</string>
+        <string>--port</string>
+        <string>3000</string>
+        <string>--log-dir</string>
+        <string>/usr/local/var/log/new-api</string>
+    </array>
+
+    <!-- 工作目录 -->
+    <key>WorkingDirectory</key>
+    <string>/usr/local/var/new-api</string>
+
+    <!-- 开机自动启动 -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- 崩溃后自动重启 -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- 崩溃后等待 5 秒再重启 -->
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+
+    <!-- 标准输出日志 -->
+    <key>StandardOutPath</key>
+    <string>/usr/local/var/log/new-api/stdout.log</string>
+
+    <!-- 错误输出日志 -->
+    <key>StandardErrorPath</key>
+    <string>/usr/local/var/log/new-api/stderr.log</string>
+
+    <!-- 环境变量（按需修改） -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SESSION_SECRET</key>
+        <string></string>
+        <key>SQL_DSN</key>
+        <string></string>
+        <key>REDIS_CONN_STRING</key>
+        <string></string>
+        <key>TZ</key>
+        <string>Asia/Shanghai</string>
+    </dict>
+</dict>
+</plist>
