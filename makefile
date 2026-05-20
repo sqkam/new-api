@@ -11,7 +11,7 @@ DEV_POSTGRES_DB = new-api
 DEV_POSTGRES_USER = root
 DEV_SQLITE_PATH ?= one-api.db
 
-.PHONY: all build build-frontend build-frontend-classic build-all-frontends build-backend docker-image docker start-backend dev dev-api dev-api-rebuild dev-web dev-web-classic reset-setup clean install-macos-launch
+.PHONY: all build build-frontend build-frontend-classic build-all-frontends build-backend docker-image docker start-backend dev dev-api dev-api-rebuild dev-web dev-web-classic reset-setup clean
 
 all: build
 
@@ -62,15 +62,6 @@ docker-image:
 docker:
 	@echo "Building docker image $(DOCKER_IMAGE)..."
 	docker build --platform $(PLATFORM) . -t $(DOCKER_IMAGE)
-
-install-macos-launch:
-	@echo "Installing macOS launchd plist..."
-	@mkdir -p /usr/local/var/log/new-api
-	@mkdir -p /usr/local/var/new-api
-	@cp com.new-api.plist ~/Library/LaunchAgents/
-	@launchctl load ~/Library/LaunchAgents/com.new-api.plist
-	@echo "Installed and loaded. Edit ~/Library/LaunchAgents/com.new-api.plist to configure env vars."
-	@echo "Manage with: launchctl start|stop|unload com.new-api"
 
 clean:
 	@echo "Cleaning..."
