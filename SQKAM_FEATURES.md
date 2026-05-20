@@ -1,9 +1,9 @@
 # SQKAM Branch — 自定义功能说明
 
 > 最后更新: 2026-05-20
-> 当前基准: `sqkam` commit `7f14b859`
-> 最新 main: `origin/main` commit `ba474393`
-> 同步状态: 2026-05-20 已执行 `git fetch origin main` 和 `git merge origin/main`，结果为 `Already up to date.`，无冲突需要处理。
+> 当前基准: `sqkam` 已合并至 `origin/main` commit `2d1ca153`
+> 最新 main: `origin/main` commit `2d1ca153`
+> 同步状态: 2026-05-20 已执行 `git fetch origin main` 和 `git merge origin/main`；本次 `makefile` 有冲突，已合并保留 sqkam 的 build/docker/launchd 目标，并接入 main 的 dev compose/reset-setup 目标。
 > 历史状态: `sqkamold` 的提交已完整并入 `sqkam`，本地 `sqkamold` 分支已删除。
 
 ---
