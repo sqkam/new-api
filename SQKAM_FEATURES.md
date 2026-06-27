@@ -1,9 +1,9 @@
 # SQKAM Branch — 自定义功能说明
 
-> 最后更新: 2026-05-20
-> 当前基准: `sqkam` 已合并至 `origin/main` commit `2d1ca153`
-> 最新 main: `origin/main` commit `2d1ca153`
-> 同步状态: 2026-05-20 已执行 `git fetch origin main` 和 `git merge origin/main`；本次 `makefile` 有冲突，已合并保留 sqkam 的 build/docker/launchd 目标，并接入 main 的 dev compose/reset-setup 目标。
+> 最后更新: 2026-06-27
+> 当前基准: `sqkam` 已合并至 `origin/main` commit `d10fc762`
+> 最新 main: `origin/main` commit `d10fc762`
+> 同步状态: 2026-06-27 已执行 `git fetch origin main` 和 `git merge origin/main`；冲突文件为 `docker-compose.yml`、`makefile`、`web/classic/bun.lock`。`docker-compose.yml` 保留 sqkam 精简版（SQLite + redis + `sqkam/new-api` 镜像 + IPv6 网络）；`makefile` 保留 sqkam 的 build/docker 目标与 `sqkam/new-api` 镜像名，接入 main 的共享 `web` workspace 安装方式；`web/classic/bun.lock` 按 main 删除（已迁移到共享 `web/bun.lock`）。
 > 历史状态: `sqkamold` 的提交已完整并入 `sqkam`，本地 `sqkamold` 分支已删除。
 
 ---
@@ -94,7 +94,31 @@ sqkam 分支在原有项目基础上新增了以下功能，**在后续合并 ma
 
 ### 6. 构建系统增强
 
-**`makefile`:** 新增 `build`、`build-backend`、`docker-image`、`docker`、`clean` 目标
+**`makefile`:** 新增 `build`、`build-backend`、`docker-image`、`container-image`、`docker`、`clean` 目标
+
+#### `container-image` 目标（macOS Container 构建）
+
+使用 macOS 原生 `container` CLI（而非 Docker）构建并推送镜像，适用于在 macOS 上无 Docker Desktop 环境下发布到 Docker Hub。
+
+```bash
+make container-image
+# 等价于:
+# container build --platform linux/amd64 . -t sqkam/new-api
+# container image push sqkam/new-api
+```
+
+**依赖:**
+- macOS 26+ 内置的 `container` CLI（`/usr/local/bin/container`）
+- 已执行 `container registry login docker.io -u <user>` 登录 Docker Hub
+
+**与 `docker-image` 的区别:**
+
+| 目标 | 工具 | 构建引擎 | 适用场景 |
+|------|------|----------|----------|
+| `docker-image` | `docker` | Docker Desktop / daemon | Linux/CI 环境，已有 Docker |
+| `container-image` | `container` | macOS 原生容器框架 | macOS 无 Docker Desktop，利用系统原生容器 |
+
+两者产物一致（均推送至 `$(DOCKER_IMAGE)` = `sqkam/new-api`），共享 `PLATFORM` 变量控制目标架构。
 
 ### 7. Docker 相关修改
 

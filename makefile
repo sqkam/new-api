@@ -13,7 +13,7 @@ DEV_POSTGRES_DB = new-api
 DEV_POSTGRES_USER = root
 DEV_SQLITE_PATH ?= one-api.db
 
-.PHONY: all build build-frontend build-frontend-classic build-all-frontends build-backend docker-image docker start-backend dev dev-api dev-api-rebuild dev-web dev-web-classic reset-setup clean
+.PHONY: all build build-frontend build-frontend-classic build-all-frontends build-backend docker-image container-image docker start-backend dev dev-api dev-api-rebuild dev-web dev-web-classic reset-setup clean
 
 all: build
 
@@ -85,6 +85,11 @@ docker-image:
 	@echo "Building docker image $(DOCKER_IMAGE)..."
 	docker build --platform $(PLATFORM) . -t $(DOCKER_IMAGE)
 	docker push $(DOCKER_IMAGE)
+
+container-image:
+	@echo "Building image $(DOCKER_IMAGE) with macOS container..."
+	container build --platform $(PLATFORM) . -t $(DOCKER_IMAGE)
+	container image push $(DOCKER_IMAGE)
 
 docker:
 	@echo "Building docker image $(DOCKER_IMAGE)..."
