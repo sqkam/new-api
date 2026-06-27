@@ -1,18 +1,7 @@
-# New-API Docker Compose Configuration (SQLite)
-#
-# Quick Start:
-#   1. make docker
-#   2. docker-compose up -d
-#   3. Access at http://localhost:3000
-#
-# SQLite database file is stored in ./data/new-api.db
-
 version: '3.4'
-
 services:
   new-api:
     image: sqkam/new-api
-    build: .
     container_name: new-api
     restart: always
     command: --log-dir /app/logs
@@ -21,6 +10,7 @@ services:
     volumes:
       - ./data:/data
       - ./logs:/app/logs
+    pull_policy: always
     environment:
       - REDIS_CONN_STRING=redis://:123456@redis:6379
       - TZ=Asia/Shanghai
@@ -49,3 +39,8 @@ services:
 networks:
   new-api-network:
     driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+        - subnet: fd00:dead::/64

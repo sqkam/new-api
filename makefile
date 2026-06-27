@@ -4,6 +4,8 @@ BACKEND_DIR = .
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo "dev")
 DOCKER_IMAGE ?= sqkam/new-api
 PLATFORM ?= linux/amd64
+DEV_FRONTEND_DEFAULT_PORT ?= 5173
+DEV_FRONTEND_CLASSIC_PORT ?= 5174
 DEV_COMPOSE_FILE = docker-compose.dev.yml
 DEV_POSTGRES_SERVICE = postgres
 DEV_BACKEND_SERVICE = new-api
@@ -20,11 +22,13 @@ build: build-backend docker-image
 
 build-frontend:
 	@echo "Building default frontend..."
-	@cd $(FRONTEND_DIR) && bun install && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(VERSION) bun run build
+	@cd ./web && bun install
+	@cd $(FRONTEND_DIR) && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(VERSION) bun run build
 
 build-frontend-classic:
 	@echo "Building classic frontend..."
-	@cd $(FRONTEND_CLASSIC_DIR) && bun install && VITE_REACT_APP_VERSION=$(VERSION) bun run build
+	@cd ./web && bun install
+	@cd $(FRONTEND_CLASSIC_DIR) && VITE_REACT_APP_VERSION=$(VERSION) bun run build
 
 build-all-frontends: build-frontend build-frontend-classic
 
@@ -45,12 +49,35 @@ dev-api-rebuild:
 	@docker compose -f $(DEV_COMPOSE_FILE) up -d --build $(DEV_BACKEND_SERVICE)
 
 dev-web:
-	@echo "Starting frontend dev server..."
-	@cd $(FRONTEND_DIR) && bun install && bun run dev
+	@echo "Starting both frontend dev servers..."
+	@echo "Default frontend: http://localhost:$(DEV_FRONTEND_DEFAULT_PORT)"
+	@echo "Classic frontend: http://localhost:$(DEV_FRONTEND_CLASSIC_PORT)"
+	@cd ./web && bun install
+	@(cd $(FRONTEND_DIR) && bun run dev -- --host 0.0.0.0 --port $(DEV_FRONTEND_DEFAULT_PORT)) & \
+		default_pid=$$!; \
+		(cd $(FRONTEND_CLASSIC_DIR) && bun run dev -- --host 0.0.0.0 --port $(DEV_FRONTEND_CLASSIC_PORT)) & \
+		classic_pid=$$!; \
+		trap 'kill $$default_pid $$classic_pid 2>/dev/null; wait $$default_pid $$classic_pid 2>/dev/null; exit 130' INT TERM; \
+		while kill -0 $$default_pid 2>/dev/null && kill -0 $$classic_pid 2>/dev/null; do \
+			sleep 1; \
+		done; \
+		if ! kill -0 $$default_pid 2>/dev/null; then \
+			wait $$default_pid; \
+			status=$$?; \
+			kill $$classic_pid 2>/dev/null; \
+			wait $$classic_pid 2>/dev/null; \
+			exit $$status; \
+		fi; \
+		wait $$classic_pid; \
+		status=$$?; \
+		kill $$default_pid 2>/dev/null; \
+		wait $$default_pid 2>/dev/null; \
+		exit $$status
 
 dev-web-classic:
 	@echo "Starting classic frontend dev server..."
-	@cd $(FRONTEND_CLASSIC_DIR) && bun install && bun run dev
+	@cd ./web && bun install
+	@cd $(FRONTEND_CLASSIC_DIR) && bun run dev -- --host 0.0.0.0 --port $(DEV_FRONTEND_CLASSIC_PORT)
 
 dev: dev-api dev-web
 
