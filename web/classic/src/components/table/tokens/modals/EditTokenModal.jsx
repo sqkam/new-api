@@ -66,6 +66,11 @@ const EditTokenModal = (props) => {
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
   const formApiRef = useRef(null);
+  // Holds the raw token data fetched from the backend so that conditional
+  // fields (rate limit, etc.) can be restored even when their form controls
+  // are not yet mounted (Semi setValues does not retain values for unmounted
+  // fields).
+  const loadedTokenRef = useRef(null);
   const [models, setModels] = useState([]);
   const [groups, setGroups] = useState([]);
   const [showQuotaInput, setShowQuotaInput] = useState(false);
@@ -181,8 +186,24 @@ const EditTokenModal = (props) => {
       data.token_count_limit_m = data.token_count_limit
         ? Number((data.token_count_limit / 1000000).toFixed(4))
         : 0;
+      // Keep the raw backend data so conditional fields (rate limit, etc.)
+      // can be restored when their controls mount, since Semi setValues does
+      // not retain values for fields whose controls are not yet rendered.
+      loadedTokenRef.current = data;
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
+        // Explicitly set rate-limit fields so they survive even when the
+        // controls are unmounted (rate_limit_enabled=false). When the user
+        // later toggles the switch on, getValue() will return the real DB
+        // value instead of 0.
+        formApiRef.current.setValue('rate_limit_enabled', !!data.rate_limit_enabled);
+        formApiRef.current.setValue('rate_limit_total', data.rate_limit_total ?? 0);
+        formApiRef.current.setValue('rate_limit_success', data.rate_limit_success ?? 0);
+        formApiRef.current.setValue('rate_limit_period', data.rate_limit_period ?? 0);
+        formApiRef.current.setValue('expired_from_first_call', !!data.expired_from_first_call);
+        formApiRef.current.setValue('expired_duration', data.expired_duration ?? 0);
+        formApiRef.current.setValue('token_count_limit', data.token_count_limit ?? 0);
+        formApiRef.current.setValue('token_count_limit_m', data.token_count_limit_m ?? 0);
       }
     } else {
       showError(message);
@@ -205,9 +226,11 @@ const EditTokenModal = (props) => {
       if (isEdit) {
         loadToken();
       } else {
+        loadedTokenRef.current = null;
         formApiRef.current?.setValues(getInitValues());
       }
     } else {
+      loadedTokenRef.current = null;
       formApiRef.current?.reset();
     }
   }, [props.visiable, props.editingToken.id]);
@@ -371,7 +394,23 @@ const EditTokenModal = (props) => {
         <Form
           key={isEdit ? 'edit' : 'new'}
           initValues={getInitValues()}
-          getFormApi={(api) => (formApiRef.current = api)}
+          getFormApi={(api) => {
+            formApiRef.current = api;
+            // If token data arrived before the form mounted (async race),
+            // apply it now so fields show DB values instead of defaults.
+            const loaded = loadedTokenRef.current;
+            if (isEdit && loaded) {
+              api.setValues({ ...getInitValues(), ...loaded });
+              api.setValue('rate_limit_enabled', !!loaded.rate_limit_enabled);
+              api.setValue('rate_limit_total', loaded.rate_limit_total ?? 0);
+              api.setValue('rate_limit_success', loaded.rate_limit_success ?? 0);
+              api.setValue('rate_limit_period', loaded.rate_limit_period ?? 0);
+              api.setValue('expired_from_first_call', !!loaded.expired_from_first_call);
+              api.setValue('expired_duration', loaded.expired_duration ?? 0);
+              api.setValue('token_count_limit', loaded.token_count_limit ?? 0);
+              api.setValue('token_count_limit_m', loaded.token_count_limit_m ?? 0);
+            }
+          }}
           onSubmit={submit}
         >
           {({ values }) => (
@@ -605,12 +644,29 @@ const EditTokenModal = (props) => {
                       extraText={t('开启后，该令牌的请求将受到调用频率限制')}
                       onChange={(val) => {
                         if (val) {
+                          // When enabling rate limit, restore the real DB values
+                          // from the fetched token instead of blindly applying
+                          // defaults. Only fall back to defaults when the DB
+                          // values are genuinely 0 (never configured).
                           const api = formApiRef.current;
-                          if (api.getValue('rate_limit_total') === 0) {
+                          const loaded = loadedTokenRef.current;
+                          const dbTotal = loaded?.rate_limit_total ?? 0;
+                          const dbSuccess = loaded?.rate_limit_success ?? 0;
+                          const dbPeriod = loaded?.rate_limit_period ?? 0;
+                          if (dbTotal > 0) {
+                            api.setValue('rate_limit_total', dbTotal);
+                          } else if (api.getValue('rate_limit_total') === 0) {
                             api.setValue('rate_limit_total', 2200);
                           }
-                          if (api.getValue('rate_limit_success') === 0) {
+                          if (dbSuccess > 0) {
+                            api.setValue('rate_limit_success', dbSuccess);
+                          } else if (api.getValue('rate_limit_success') === 0) {
                             api.setValue('rate_limit_success', 2000);
+                          }
+                          if (dbPeriod > 0) {
+                            api.setValue('rate_limit_period', dbPeriod);
+                          } else if (api.getValue('rate_limit_period') === 0) {
+                            api.setValue('rate_limit_period', 86400);
                           }
                         }
                       }}
