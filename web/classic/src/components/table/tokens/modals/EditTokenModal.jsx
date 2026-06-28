@@ -171,8 +171,6 @@ const EditTokenModal = (props) => {
     setLoading(true);
     let res = await API.get(`/api/token/${props.editingToken.id}`);
     const { success, message, data } = res.data;
-    // eslint-disable-next-line no-console
-    console.log('[EditTokenModal] loadToken response:', { success, data });
     if (success) {
       if (data.expired_time !== -1) {
         data.expired_time = timestamp2string(data.expired_time);
@@ -192,15 +190,6 @@ const EditTokenModal = (props) => {
       // can be restored when their controls mount, since Semi setValues does
       // not retain values for fields whose controls are not yet rendered.
       loadedTokenRef.current = data;
-      // eslint-disable-next-line no-console
-      console.log('[EditTokenModal] formApiRef.current before setValues:', formApiRef.current);
-      // eslint-disable-next-line no-console
-      console.log('[EditTokenModal] rate_limit fields in data:', {
-        rate_limit_enabled: data.rate_limit_enabled,
-        rate_limit_total: data.rate_limit_total,
-        rate_limit_success: data.rate_limit_success,
-        rate_limit_period: data.rate_limit_period,
-      });
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
         // Explicitly set rate-limit fields so they survive even when the
@@ -215,11 +204,6 @@ const EditTokenModal = (props) => {
         formApiRef.current.setValue('expired_duration', data.expired_duration ?? 0);
         formApiRef.current.setValue('token_count_limit', data.token_count_limit ?? 0);
         formApiRef.current.setValue('token_count_limit_m', data.token_count_limit_m ?? 0);
-        // eslint-disable-next-line no-console
-        console.log('[EditTokenModal] after setValues, getValue rate_limit_total:', formApiRef.current.getValue('rate_limit_total'));
-      } else {
-        // eslint-disable-next-line no-console
-        console.warn('[EditTokenModal] formApiRef.current is null, setValues skipped (will retry in getFormApi)');
       }
     } else {
       showError(message);

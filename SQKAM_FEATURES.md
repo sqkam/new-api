@@ -1,6 +1,6 @@
 # SQKAM Branch — 自定义功能说明
 
-> 最后更新: 2026-06-28（首次调用过期：未调用时强制 expired_time=-1）
+> 最后更新: 2026-06-28（web/classic 编辑表单回填修复）
 > 当前基准: `sqkam` 已合并至 `origin/main` commit `d10fc762`
 > 最新 main: `origin/main` commit `d10fc762`
 > 同步状态: 2026-06-27 已执行 `git fetch origin main` 和 `git merge origin/main`；冲突文件为 `docker-compose.yml`、`makefile`、`web/classic/bun.lock`。`docker-compose.yml` 保留 sqkam 精简版（SQLite + redis + `sqkam/new-api` 镜像 + IPv6 网络）；`makefile` 保留 sqkam 的 build/docker 目标与 `sqkam/new-api` 镜像名，接入 main 的共享 `web` workspace 安装方式；`web/classic/bun.lock` 按 main 删除（已迁移到共享 `web/bun.lock`）。
@@ -110,9 +110,38 @@ sqkam 分支在原有项目基础上新增了以下功能，**在后续合并 ma
 
 **行为:** 编辑令牌任意字段时，限流配置、Token 数量限制、首次调用过期配置全部保留；`first_call_time` 后端永远保留不覆盖。
 
-**注意:** 这是 `web/default/`（React 19 + shadcn）的修复。`web/classic/`（React 18 + Semi Design）的 `EditTokenModal.jsx` 本身有完整的限流/首次调用 UI，不受此问题影响。
+### 6. 编辑令牌表单回填修复（web/classic）
 
-### 6. 前端 Dashboard Token 图表
+**问题背景:** 2026-06-28 修复。`web/classic/` 的 `EditTokenModal.jsx` 编辑令牌时，限流字段（`rate_limit_total`/`rate_limit_success`/`rate_limit_period`）、首次调用过期字段（`expired_from_first_call`/`expired_duration`）、Token 用量限制字段显示的是 `getInitValues()` 的硬编码默认值（2200/2000/86400 等），而非数据库真实值。
+
+**根因（三个叠加问题）:**
+
+1. **Semi Design Form 条件渲染字段值丢失**：限流字段在 `{values.rate_limit_enabled && ...}` 条件下渲染，当 `rate_limit_enabled=false` 时控件不挂载，`setValues` 不会为未挂载的字段保留值
+2. **开关 onChange 覆盖数据库值**：`rate_limit_enabled` 开关 `onChange` 用 `api.getValue('rate_limit_total') === 0` 判断是否填默认值，但未挂载字段 `getValue` 返回 0 → 盲目填入 2200/2000 默认值，覆盖了数据库真实值（如 3000）
+3. **异步时序竞态**：`loadToken` 的 `await API.get()` 返回时，`formApiRef.current` 可能为 null（Form 还没挂载），`setValues` 被跳过，表单保持 `initValues` 默认值
+
+**修复方案（`web/classic/src/components/table/tokens/modals/EditTokenModal.jsx`）:**
+
+| 改动 | 说明 |
+|------|------|
+| 新增 `loadedTokenRef` | 用 `useRef` 缓存 `loadToken` 拿到的原始后端数据，解决条件渲染字段值丢失问题 |
+| `loadToken` 显式 `setValue` 每个限流/首次调用字段 | 绕开 `setValues` 对未挂载字段不保留值的问题，把数据库值强制写入表单状态 |
+| `getFormApi` 回调兜底 | 如果 token 数据在 Form 挂载前就到了（异步竞态），在 `getFormApi` 回调里立即 `setValues` + `setValue`，解决 `formApiRef.current` 为 null 时的时序问题 |
+| `rate_limit_enabled` 开关 `onChange` 改用 `loadedTokenRef` | 开启限流时优先恢复数据库真实值（`loadedTokenRef.current.rate_limit_total`），只有数据库值确实为 0（从未配置）才填默认值 2200/2000/86400 |
+| 关闭/新建时清空 `loadedTokenRef` | 避免脏数据残留 |
+
+**行为对照:**
+
+| 场景 | 修复前 | 修复后 |
+|------|--------|--------|
+| 数据库 `rate_limit_total=3000`，打开开关 | 显示 2200（硬编码默认） | 显示 3000（数据库值） |
+| 数据库 `rate_limit_total=0`，打开开关 | 显示 2200 | 显示 2200（仅未配置时才填默认） |
+| `formApiRef` 在 `loadToken` 时为 null | 表单全默认值 | `getFormApi` 回调里补设 |
+| 数据库 `expired_duration=60` | 显示 60（已正常） | 显示 60（保持正常） |
+
+**注意:** 这是 `web/classic/`（React 18 + Semi Design）的修复，与 §5 `web/default/` 的透传修复是两个独立前端。`web/classic/` 有完整 UI 控件，问题是回填；`web/default/` 没有这些字段的 UI 控件，问题是透传防清零。
+
+### 7. 前端 Dashboard Token 图表
 
 **新增图表（位于 Dashboard 调用趋势 Tab 右侧）:**
 
@@ -130,7 +159,7 @@ sqkam 分支在原有项目基础上新增了以下功能，**在后续合并 ma
 | `web/classic/src/components/dashboard/index.jsx` | 透传 `spec_token_line` / `spec_token_rank_bar` |
 | `web/classic/src/helpers/dashboard.jsx` | 聚合数据增加 `tokens` 字段 |
 
-### 7. 构建系统增强
+### 8. 构建系统增强
 
 **`makefile`:** 新增 `build`、`build-backend`、`docker-image`、`container-image`、`docker`、`clean` 目标
 
@@ -158,7 +187,7 @@ make container-image
 
 两者产物一致（均推送至 `$(DOCKER_IMAGE)` = `sqkam/new-api`），共享 `PLATFORM` 变量控制目标架构。
 
-### 8. Docker 相关修改
+### 9. Docker 相关修改
 
 **`Dockerfile`:** 使用多阶段构建（合并后已采用 main 的版本）
 **`docker-compose.yml`:** 配置调整
@@ -214,10 +243,11 @@ make container-image
 sqkam 分支的前端基于 `web/classic/`（React 18 + Semi Design），**不是** `web/default/`（React 19 + shadcn）。
 
 在合并 main 时：
-1. **`web/classic/`** 中的前端变更需要保留（EditTokenModal 限流面板、Dashboard Token 图表等）
-2. **`web/default/`** 中的字段透传修复（2026-06-28）需要保留：`features/keys/types.ts` 的 `apiKeySchema`/`ApiKeyFormData` 透传字段、`features/keys/components/api-keys-mutate-drawer.tsx` 的 `fetchedTokenRef` 与 `onSubmit` 合并逻辑
-3. **i18n 翻译文件**：sqkam 的 i18n 修改已全部包含在 main 的翻译文件中（main 的翻译更完整），合并时直接用 main 的版本
-4. 2026-05-20 确认最新 `origin/main` 已在 `sqkam` 中，无新增冲突。
+1. **`web/classic/`** 中的前端变更需要保留（EditTokenModal 限流面板、Dashboard Token 图表、回填修复等）
+2. **`web/classic/`** 中的编辑回填修复（2026-06-28）需要保留：`EditTokenModal.jsx` 的 `loadedTokenRef`、`loadToken` 显式 `setValue`、`getFormApi` 回调兜底、`rate_limit_enabled` 开关 `onChange` 改用 `loadedTokenRef`
+3. **`web/default/`** 中的字段透传修复（2026-06-28）需要保留：`features/keys/types.ts` 的 `apiKeySchema`/`ApiKeyFormData` 透传字段、`features/keys/components/api-keys-mutate-drawer.tsx` 的 `fetchedTokenRef` 与 `onSubmit` 合并逻辑
+4. **i18n 翻译文件**：sqkam 的 i18n 修改已全部包含在 main 的翻译文件中（main 的翻译更完整），合并时直接用 main 的版本
+5. 2026-05-20 确认最新 `origin/main` 已在 `sqkam` 中，无新增冲突。
 
 ### 冲突高发区域
 
@@ -231,7 +261,7 @@ sqkam 分支的前端基于 `web/classic/`（React 18 + Semi Design），**不�
 | `router/relay-router.go` | **中** | 中间件注册顺序（含 `RecordFirstCallTime`） |
 | `router/video-router.go` | **中** | `RecordFirstCallTime` 注册（2026-06-28 新增） |
 | `router/api-router.go` | **中** | API 路由注册 |
-| `web/classic/.../EditTokenModal.jsx` | **高** | 前端 Token 编辑表单 |
+| `web/classic/.../EditTokenModal.jsx` | **高** | 前端 Token 编辑表单（含 `loadedTokenRef` 回填修复 2026-06-28） |
 | `web/classic/.../useDashboardCharts.jsx` | **中** | Dashboard 图表规格 |
 | `web/default/src/features/keys/types.ts` | **中** | apiKeySchema 透传字段（2026-06-28） |
 | `web/default/src/features/keys/components/api-keys-mutate-drawer.tsx` | **中** | fetchedTokenRef 透传逻辑（2026-06-28） |
@@ -259,6 +289,7 @@ rg -c "RecordFirstCallTime" router/video-router.go  # 应 >= 3（video/kling/jim
 
 # 前端
 rg -c "rate_limit" web/classic/src/components/table/tokens/modals/EditTokenModal.jsx  # 应 >= 18
+rg -c "loadedTokenRef" web/classic/src/components/table/tokens/modals/EditTokenModal.jsx  # 应 >= 3（2026-06-28 回填修复）
 rg -c "spec_token" web/classic/src/hooks/dashboard/useDashboardCharts.jsx  # 应 >= 4
 test -f web/classic/src/helpers/token.js     # 应存在
 rg -c "fetchedTokenRef" web/default/src/features/keys/components/api-keys-mutate-drawer.tsx  # 应 >= 2（2026-06-28 后）
