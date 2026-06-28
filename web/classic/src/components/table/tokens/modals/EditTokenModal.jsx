@@ -94,6 +94,8 @@ const EditTokenModal = (props) => {
     rate_limit_period: 86400,
     expired_from_first_call: false,
     expired_duration: 0,
+    expired_duration_unit: 86400,
+    expired_duration_qty: 1,
     token_count_limit: 0,
     token_count_limit_m: 0,
   });
@@ -202,6 +204,21 @@ const EditTokenModal = (props) => {
         formApiRef.current.setValue('rate_limit_period', data.rate_limit_period ?? 0);
         formApiRef.current.setValue('expired_from_first_call', !!data.expired_from_first_call);
         formApiRef.current.setValue('expired_duration', data.expired_duration ?? 0);
+        // Reverse-calculate expired_duration into unit + qty for the shortcut UI.
+        // Pick the largest unit that divides evenly; default to days.
+        const dur = data.expired_duration ?? 0;
+        if (dur > 0) {
+          if (dur % 2592000 === 0) {
+            formApiRef.current.setValue('expired_duration_unit', 2592000);
+            formApiRef.current.setValue('expired_duration_qty', dur / 2592000);
+          } else if (dur % 604800 === 0) {
+            formApiRef.current.setValue('expired_duration_unit', 604800);
+            formApiRef.current.setValue('expired_duration_qty', dur / 604800);
+          } else if (dur % 86400 === 0) {
+            formApiRef.current.setValue('expired_duration_unit', 86400);
+            formApiRef.current.setValue('expired_duration_qty', dur / 86400);
+          }
+        }
         formApiRef.current.setValue('token_count_limit', data.token_count_limit ?? 0);
         formApiRef.current.setValue('token_count_limit_m', data.token_count_limit_m ?? 0);
       }
@@ -250,7 +267,7 @@ const EditTokenModal = (props) => {
   const submit = async (values) => {
     setLoading(true);
     if (isEdit) {
-      let { tokenCount: _tc, ...localInputs } = values;
+      let { tokenCount: _tc, expired_duration_unit: _uu, expired_duration_qty: _qq, ...localInputs } = values;
       localInputs.remain_quota = localInputs.unlimited_quota
         ? 0
         : displayAmountToQuota(localInputs.remain_amount);
@@ -290,7 +307,7 @@ const EditTokenModal = (props) => {
       const count = parseInt(values.tokenCount, 10) || 1;
       let successCount = 0;
       for (let i = 0; i < count; i++) {
-        let { tokenCount: _tc, ...localInputs } = values;
+        let { tokenCount: _tc, expired_duration_unit: _uu, expired_duration_qty: _qq, ...localInputs } = values;
         const baseName =
           values.name.trim() === '' ? 'default' : values.name.trim();
         if (i !== 0 || values.name.trim() === '') {
@@ -407,6 +424,20 @@ const EditTokenModal = (props) => {
               api.setValue('rate_limit_period', loaded.rate_limit_period ?? 0);
               api.setValue('expired_from_first_call', !!loaded.expired_from_first_call);
               api.setValue('expired_duration', loaded.expired_duration ?? 0);
+              // Reverse-calculate expired_duration into unit + qty for the shortcut UI.
+              const dur = loaded.expired_duration ?? 0;
+              if (dur > 0) {
+                if (dur % 2592000 === 0) {
+                  api.setValue('expired_duration_unit', 2592000);
+                  api.setValue('expired_duration_qty', dur / 2592000);
+                } else if (dur % 604800 === 0) {
+                  api.setValue('expired_duration_unit', 604800);
+                  api.setValue('expired_duration_qty', dur / 604800);
+                } else if (dur % 86400 === 0) {
+                  api.setValue('expired_duration_unit', 86400);
+                  api.setValue('expired_duration_qty', dur / 86400);
+                }
+              }
               api.setValue('token_count_limit', loaded.token_count_limit ?? 0);
               api.setValue('token_count_limit_m', loaded.token_count_limit_m ?? 0);
             }
@@ -488,6 +519,17 @@ const EditTokenModal = (props) => {
                       label={t('首次调用后生效')}
                       size='default'
                       extraText={t('开启后，令牌的过期时间从首次成功调用时开始计算，无需设置过期时间')}
+                      onChange={(val) => {
+                        if (val) {
+                          const api = formApiRef.current;
+                          if (!api) return;
+                          const unit = api.getValue('expired_duration_unit') || 86400;
+                          const qty = api.getValue('expired_duration_qty') || 1;
+                          if (api.getValue('expired_duration') <= 0) {
+                            api.setValue('expired_duration', unit * qty);
+                          }
+                        }
+                      }}
                     />
                   </Col>
                   {/* 固定过期时间 - 仅在未开启"首次调用后生效"时显示 */}
@@ -570,32 +612,46 @@ const EditTokenModal = (props) => {
                           step={3600}
                           rules={[{ required: true, message: t('请输入有效时长') }]}
                           style={{ width: '100%' }}
+                          extraText={t('或用下方快捷设置计算')}
                         />
                       </Col>
                       <Col xs={24} sm={24} md={24} lg={14} xl={14}>
-                        <Form.Slot label={t('快捷设置')}>
+                        <Form.Slot label={t('快捷设置（单位 × 数量）')}>
                           <Space wrap>
-                            <Button
-                              theme='light'
-                              type='tertiary'
-                              onClick={() => formApiRef.current?.setValue('expired_duration', 86400)}
-                            >
-                              {t('一天')}
-                            </Button>
-                            <Button
-                              theme='light'
-                              type='tertiary'
-                              onClick={() => formApiRef.current?.setValue('expired_duration', 604800)}
-                            >
-                              {t('一周')}
-                            </Button>
-                            <Button
-                              theme='light'
-                              type='tertiary'
-                              onClick={() => formApiRef.current?.setValue('expired_duration', 2592000)}
-                            >
-                              {t('一个月')}
-                            </Button>
+                            <Form.Select
+                              field='expired_duration_unit'
+                              noLabel
+                              style={{ width: 100 }}
+                              placeholder={t('单位')}
+                              optionList={[
+                                { label: t('天'), value: 86400 },
+                                { label: t('周'), value: 604800 },
+                                { label: t('月'), value: 2592000 },
+                              ]}
+                              onChange={(val) => {
+                                const api = formApiRef.current;
+                                if (!api) return;
+                                const qty = api.getValue('expired_duration_qty') || 0;
+                                if (qty > 0) {
+                                  api.setValue('expired_duration', val * qty);
+                                }
+                              }}
+                            />
+                            <Form.InputNumber
+                              field='expired_duration_qty'
+                              noLabel
+                              min={1}
+                              placeholder={t('数量')}
+                              style={{ width: 90 }}
+                              onChange={(qty) => {
+                                const api = formApiRef.current;
+                                if (!api) return;
+                                const unit = api.getValue('expired_duration_unit') || 0;
+                                if (unit > 0 && qty > 0) {
+                                  api.setValue('expired_duration', unit * qty);
+                                }
+                              }}
+                            />
                           </Space>
                         </Form.Slot>
                       </Col>
