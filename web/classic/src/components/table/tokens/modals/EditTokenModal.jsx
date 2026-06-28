@@ -88,12 +88,12 @@ const EditTokenModal = (props) => {
     group: '',
     cross_group_retry: false,
     tokenCount: 1,
-    rate_limit_enabled: false,
-    rate_limit_total: 2200,
+    rate_limit_enabled: true,
+    rate_limit_total: 2000,
     rate_limit_success: 2000,
     rate_limit_period: 86400,
-    expired_from_first_call: false,
-    expired_duration: 0,
+    expired_from_first_call: true,
+    expired_duration: 86400,
     expired_duration_unit: 86400,
     expired_duration_qty: 1,
     token_count_limit: 0,
@@ -712,7 +712,7 @@ const EditTokenModal = (props) => {
                           if (dbTotal > 0) {
                             api.setValue('rate_limit_total', dbTotal);
                           } else if (api.getValue('rate_limit_total') === 0) {
-                            api.setValue('rate_limit_total', 2200);
+                            api.setValue('rate_limit_total', 2000);
                           }
                           if (dbSuccess > 0) {
                             api.setValue('rate_limit_success', dbSuccess);
