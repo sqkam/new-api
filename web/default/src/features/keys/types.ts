@@ -45,6 +45,18 @@ export const apiKeySchema = z.object({
   model_limits_enabled: z.boolean(),
   model_limits: z.string().nullish().default(''),
   allow_ips: z.string().nullish().default(''),
+  // Fields below are passthrough on edit (no dedicated UI control in the form).
+  // They are returned by the backend and sent back unchanged on update so that
+  // editing other fields does not zero these out.
+  rate_limit_enabled: z.boolean().optional(),
+  rate_limit_total: z.number().optional(),
+  rate_limit_success: z.number().optional(),
+  rate_limit_period: z.number().optional(),
+  token_count_limit: z.number().optional(),
+  used_token_count: z.number().optional(),
+  expired_from_first_call: z.boolean().optional(),
+  expired_duration: z.number().optional(),
+  first_call_time: z.number().optional(),
 })
 
 export type ApiKey = z.infer<typeof apiKeySchema>
@@ -92,6 +104,15 @@ export interface ApiKeyFormData {
   allow_ips: string
   group: string
   cross_group_retry: boolean
+  // Passthrough fields (no UI control); preserved from the fetched token on edit.
+  rate_limit_enabled?: boolean
+  rate_limit_total?: number
+  rate_limit_success?: number
+  rate_limit_period?: number
+  token_count_limit?: number
+  expired_from_first_call?: boolean
+  expired_duration?: number
+  first_call_time?: number
 }
 
 // ============================================================================

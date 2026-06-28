@@ -319,6 +319,29 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.RateLimitPeriod = token.RateLimitPeriod
 		cleanToken.ExpiredFromFirstCall = token.ExpiredFromFirstCall
 		cleanToken.ExpiredDuration = token.ExpiredDuration
+		// FirstCallTime is preserved from the DB record (cleanToken) and never
+		// overwritten by client input — it is set only by the first successful
+		// API call via the RecordFirstCallTime middleware.
+		//
+		// First-call-based expiration computation:
+		//   - If the token has already been called (FirstCallTime > 0) with
+		//     first-call-based expiration enabled and a positive duration,
+		//     recompute ExpiredTime = FirstCallTime + ExpiredDuration. This
+		//     covers renewal (editing ExpiredDuration) and mode switch (from
+		//     fixed expiration to first-call-based).
+		//   - If first-call-based expiration is enabled but the token has never
+		//     been called (FirstCallTime == 0), force ExpiredTime = -1 (never
+		//     expires) and let RecordFirstCallTime activate it on the first
+		//     successful call. This ignores any stale ExpiredTime from the form.
+		//   - If first-call-based expiration is disabled, ExpiredTime stays as
+		//     supplied by the client (fixed expiration mode).
+		if cleanToken.ExpiredFromFirstCall {
+			if cleanToken.FirstCallTime > 0 && cleanToken.ExpiredDuration > 0 {
+				cleanToken.ExpiredTime = cleanToken.FirstCallTime + int64(cleanToken.ExpiredDuration)
+			} else {
+				cleanToken.ExpiredTime = -1
+			}
+		}
 	}
 	err = cleanToken.Update()
 	if err != nil {

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, type SubmitErrorHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
@@ -99,6 +99,11 @@ export function ApiKeysMutateDrawer({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const defaultUseAutoGroup = status?.default_use_auto_group === true
+  // Holds the full token fetched from the backend when editing. Passthrough
+  // fields (rate limit, token count limit, first-call expiration) have no UI
+  // control in this form, so on submit we merge them back from this snapshot
+  // to avoid zeroing them out.
+  const fetchedTokenRef = useRef<ApiKey | null>(null)
 
   // Fetch models
   const { data: modelsData } = useQuery({
@@ -139,10 +144,12 @@ export function ApiKeysMutateDrawer({
     if (open && isUpdate && currentRow) {
       getApiKey(currentRow.id).then((result) => {
         if (result.success && result.data) {
+          fetchedTokenRef.current = result.data
           form.reset(transformApiKeyToFormDefaults(result.data))
         }
       })
     } else if (open && !isUpdate) {
+      fetchedTokenRef.current = null
       form.reset(
         getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto)
       )
@@ -171,9 +178,20 @@ export function ApiKeysMutateDrawer({
       const basePayload = transformFormDataToPayload(data)
 
       if (isUpdate && currentRow) {
+        const fetched = fetchedTokenRef.current
         const result = await updateApiKey({
           ...basePayload,
           id: currentRow.id,
+          // Merge passthrough fields from the latest DB snapshot so editing
+          // other fields does not zero these out. The backend also preserves
+          // first_call_time regardless.
+          rate_limit_enabled: fetched?.rate_limit_enabled ?? false,
+          rate_limit_total: fetched?.rate_limit_total ?? 0,
+          rate_limit_success: fetched?.rate_limit_success ?? 0,
+          rate_limit_period: fetched?.rate_limit_period ?? 0,
+          token_count_limit: fetched?.token_count_limit ?? 0,
+          expired_from_first_call: fetched?.expired_from_first_call ?? false,
+          expired_duration: fetched?.expired_duration ?? 0,
         })
         if (result.success) {
           toast.success(t(SUCCESS_MESSAGES.API_KEY_UPDATED))

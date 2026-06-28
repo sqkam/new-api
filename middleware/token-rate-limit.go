@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 )
@@ -107,13 +106,10 @@ func redisTokenRateLimitHandler(c *gin.Context, tokenId, totalLimit, successLimi
 	// Process request
 	c.Next()
 
-	// Post-request: handle success and first-call expiration
+	// Post-request: handle success
 	if c.Writer.Status() < 400 {
 		rdb.HIncrBy(ctx, key, "success", 1)
 		rdb.Incr(ctx, allTimeSuccessKey)
-
-		// Handle first-call expiration
-		handleFirstCallExpiration(c, tokenId)
 	}
 }
 
@@ -157,8 +153,6 @@ func memoryTokenRateLimitHandler(c *gin.Context, tokenId, totalLimit, successLim
 	// Post-request: handle success
 	if c.Writer.Status() < 400 {
 		state.Success++
-		// Handle first-call expiration
-		handleFirstCallExpiration(c, tokenId)
 	}
 }
 
@@ -176,43 +170,6 @@ func abortWithTokenRateLimitMessage(c *gin.Context, limit, used, successLimit, s
 		},
 	})
 	c.Abort()
-}
-
-// handleFirstCallExpiration sets the token's ExpiredTime on first successful call
-// if ExpiredFromFirstCall is enabled and not yet set.
-func handleFirstCallExpiration(c *gin.Context, tokenId int) {
-	expiredFromFirstCall := c.GetBool("token_expired_from_first_call")
-	if !expiredFromFirstCall {
-		return
-	}
-
-	expiredDuration := c.GetInt("token_expired_duration")
-	if expiredDuration <= 0 {
-		return
-	}
-
-	tokenKey := c.GetString("token_key")
-	if tokenKey == "" {
-		return
-	}
-
-	now := time.Now().Unix()
-	newExpiredTime := now + int64(expiredDuration)
-
-	// Update token in DB
-	err := model.SetTokenExpiredTime(tokenId, newExpiredTime)
-	if err != nil {
-		common.SysLog("failed to set token first-call expiration: " + err.Error())
-		return
-	}
-
-	// Update context to prevent repeated processing in same request
-	c.Set("token_expired_from_first_call", false)
-
-	// Invalidate cache so next request picks up new expiration
-	if common.RedisEnabled {
-		_ = model.CacheDeleteToken(tokenKey)
-	}
 }
 
 // GetTokenRateLimitStatus returns current rate limit status for a token.

@@ -442,6 +442,7 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	c.Set("token_rate_limit_period", token.RateLimitPeriod)
 	c.Set("token_expired_from_first_call", token.ExpiredFromFirstCall)
 	c.Set("token_expired_duration", token.ExpiredDuration)
+	c.Set("token_first_call_time", token.FirstCallTime)
 	c.Set("token_count_limit", token.TokenCountLimit)
 	c.Set("used_token_count", token.UsedTokenCount)
 	if len(parts) > 1 {

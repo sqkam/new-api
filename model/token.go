@@ -35,6 +35,7 @@ type Token struct {
 	RateLimitPeriod      int            `json:"rate_limit_period" gorm:"default:0"`           // seconds
 	ExpiredFromFirstCall bool           `json:"expired_from_first_call" gorm:"default:false"` // 过期时间从首次调用起算
 	ExpiredDuration      int            `json:"expired_duration" gorm:"default:0"`            // 首次调用后过期秒数
+	FirstCallTime        int64          `json:"first_call_time" gorm:"bigint;default:0"`      // 首次成功调用时间戳，0=未激活
 	UsedTokenCount       int            `json:"used_token_count" gorm:"default:0"`            // 已使用token总数（prompt+completion）
 	TokenCountLimit      int            `json:"token_count_limit" gorm:"default:0"`           // token使用总数限制，0=不限制
 	DeletedAt            gorm.DeletedAt `gorm:"index"`
@@ -316,7 +317,8 @@ func (token *Token) Update() (err error) {
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
 		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry",
 		"rate_limit_enabled", "rate_limit_total", "rate_limit_success", "rate_limit_period",
-		"expired_from_first_call", "expired_duration", "used_token_count", "token_count_limit").Updates(token).Error
+		"expired_from_first_call", "expired_duration", "first_call_time",
+		"used_token_count", "token_count_limit").Updates(token).Error
 	return err
 }
 
@@ -533,10 +535,24 @@ func GetTokenKeysByIds(ids []int, userId int) ([]Token, error) {
 
 // InvalidateUserTokensCache 清理指定用户所有令牌在 Redis 中的缓存，
 
-// SetTokenExpiredTime updates the token's expiration time in DB and cache
-func SetTokenExpiredTime(tokenId int, expiredTime int64) error {
-	err := DB.Model(&Token{}).Where("id = ?", tokenId).Update("expired_time", expiredTime).Error
-	return err
+// SetTokenFirstCallAndExpiration records the first-call timestamp and sets the
+// expiration time atomically. Used when a token with ExpiredFromFirstCall is
+// activated on its first successful call.
+func SetTokenFirstCallAndExpiration(tokenId int, firstCallTime, expiredTime int64) error {
+	return DB.Model(&Token{}).Where("id = ?", tokenId).
+		Updates(map[string]interface{}{
+			"first_call_time": firstCallTime,
+			"expired_time":    expiredTime,
+		}).Error
+}
+
+// SetTokenFirstCallTime records only the first-call timestamp, leaving
+// expired_time untouched. Used for tokens that do not have ExpiredFromFirstCall
+// enabled — the first-call anchor is recorded so it can be reused later if the
+// user switches the token to first-call-based expiration.
+func SetTokenFirstCallTime(tokenId int, firstCallTime int64) error {
+	return DB.Model(&Token{}).Where("id = ?", tokenId).
+		Update("first_call_time", firstCallTime).Error
 }
 
 // CacheDeleteToken removes token from Redis cache (exported for middleware use)
