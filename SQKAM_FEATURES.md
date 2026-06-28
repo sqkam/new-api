@@ -1,6 +1,6 @@
 # SQKAM Branch — 自定义功能说明
 
-> 最后更新: 2026-06-28（web/classic 编辑表单回填修复）
+> 最后更新: 2026-06-28（redis RDB 持久化 + 子网改为 172.22.0.0/16）
 > 当前基准: `sqkam` 已合并至 `origin/main` commit `d10fc762`
 > 最新 main: `origin/main` commit `d10fc762`
 > 同步状态: 2026-06-27 已执行 `git fetch origin main` 和 `git merge origin/main`；冲突文件为 `docker-compose.yml`、`makefile`、`web/classic/bun.lock`。`docker-compose.yml` 保留 sqkam 精简版（SQLite + redis + `sqkam/new-api` 镜像 + IPv6 网络）；`makefile` 保留 sqkam 的 build/docker 目标与 `sqkam/new-api` 镜像名，接入 main 的共享 `web` workspace 安装方式；`web/classic/bun.lock` 按 main 删除（已迁移到共享 `web/bun.lock`）。
@@ -190,7 +190,27 @@ make container-image
 ### 9. Docker 相关修改
 
 **`Dockerfile`:** 使用多阶段构建（合并后已采用 main 的版本）
-**`docker-compose.yml`:** 配置调整
+
+**`docker-compose.yml`:** 配置调整，关键点：
+
+| 配置 | 说明 |
+|------|------|
+| `new-api` 镜像 | `sqkam/new-api`（不是 `calciumion/new-api`） |
+| `new-api` volume | `./data:/data`（SQLite 数据库）、`./logs:/app/logs` |
+| `new-api` 环境 | `REDIS_CONN_STRING=redis://:123456@redis:6379`、`RELAY_TIMEOUT=60`、`BATCH_UPDATE_ENABLED=true` |
+| `redis` 持久化（2026-06-28 新增） | volume `./data/redis:/data` + `--save 60 1`（RDB 持久化，60 秒内至少 1 个 key 变化触发快照）。`docker compose down` 后限流计数、令牌缓存不丢 |
+| 网络 | `enable_ipv6: true`，IPv4 子网 `172.22.0.0/16`（2026-06-28 从 `172.20.0.0/16` 改，避开其他容器网络冲突），IPv6 子网 `fd00:dead::/64` |
+| `pull_policy: always` | new-api 服务配置，每次 `up` 自动拉取最新镜像 |
+
+**redis 持久化说明（2026-06-28）:**
+- 之前 redis 没有 volume 和持久化配置，`docker compose down` 后所有限流计数、令牌缓存丢失
+- 现在用 RDB（不用 AOF，避免性能开销），`--save 60 1` 触发快照
+- 数据文件：`./data/redis/dump.rdb`
+- 最多丢失最近 60 秒的数据
+
+**子网冲突说明（2026-06-28）:**
+- 公网服务器上 `xianyu-auto-reply-fix_xianyu-network` 占用 `172.20.0.0/16`，与原配置冲突
+- 改为 `172.22.0.0/16`，内网服务器无此冲突但统一配置
 
 ---
 

@@ -32,7 +32,9 @@ services:
     image: redis:latest
     container_name: redis
     restart: always
-    command: ["redis-server", "--requirepass", "123456"]
+    command: ["redis-server", "--requirepass", "123456", "--save", "60", "1"]
+    volumes:
+      - ./data/redis:/data
     networks:
       - new-api-network
 
@@ -42,5 +44,5 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.22.0.0/16
         - subnet: fd00:dead::/64
