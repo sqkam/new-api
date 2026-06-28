@@ -739,7 +739,7 @@ const EditTokenModal = (props) => {
                           style={{ width: '100%' }}
                         />
                         <Space wrap className='mt-1'>
-                          {[1500, 2000, 2500, 3000].map((v) => (
+                          {[1500, 2000, 2500, 3000, 5000].map((v) => (
                             <Button
                               key={v}
                               size='small'
@@ -763,7 +763,7 @@ const EditTokenModal = (props) => {
                           style={{ width: '100%' }}
                         />
                         <Space wrap className='mt-1'>
-                          {[1500, 2000, 2500, 3000].map((v) => (
+                          {[1500, 2000, 2500, 3000, 5000].map((v) => (
                             <Button
                               key={v}
                               size='small'
