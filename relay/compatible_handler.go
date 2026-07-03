@@ -106,16 +106,15 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		storageBytes, _ := storage.Bytes()
 		requestBodyData := storageBytes
 
-		// 当上次请求因 reasoning_effort 验证错误失败时，自动降级请求体中的 reasoning_effort 字段
-		if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) {
-			effortVal := gjson.GetBytes(requestBodyData, "reasoning_effort").String()
-			if effortVal != "" {
-				if downgraded, changed := reasoning.DowngradeReasoningEffort(effortVal); changed {
-					logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected (passthrough), downgrading reasoning_effort from %q to %q", effortVal, downgraded))
-					requestBodyData, err = sjson.SetBytes(requestBodyData, "reasoning_effort", downgraded)
-					if err != nil {
-						return types.NewError(fmt.Errorf("failed to update reasoning_effort in passthrough body: %w", err), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-					}
+		// 主动降级 passthrough 请求体中的 reasoning_effort 非标准值
+		// 400 不会触发重试，所以不能依赖 LastError 判断
+		effortVal := gjson.GetBytes(requestBodyData, "reasoning_effort").String()
+		if effortVal != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortVal); changed {
+				logger.LogInfo(c, fmt.Sprintf("proactively downgrading passthrough reasoning_effort from %q to %q for upstream compatibility", effortVal, downgraded))
+				requestBodyData, err = sjson.SetBytes(requestBodyData, "reasoning_effort", downgraded)
+				if err != nil {
+					return types.NewError(fmt.Errorf("failed to update reasoning_effort in passthrough body: %w", err), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 				}
 			}
 		}

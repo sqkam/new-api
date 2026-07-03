@@ -108,6 +108,13 @@ func applyDeepSeekV4OpenAIThinkingSuffix(info *relaycommon.RelayInfo, request *d
 	}
 	request.Model = baseModel
 	request.THINKING = thinking
+	// 主动降级非标准 effort 值（如 max → high），避免上游 SGLang 等引擎 400 报错
+	if effort != "" {
+		if downgraded, changed := reasoning.DowngradeReasoningEffort(effort); changed {
+			common.SysLog(fmt.Sprintf("proactively downgrading deepseek-v4 ReasoningEffort from %q to %q for upstream compatibility", effort, downgraded))
+			effort = downgraded
+		}
+	}
 	request.ReasoningEffort = effort
 	if info != nil {
 		if info.ChannelMeta != nil {
@@ -132,6 +139,11 @@ func applyDeepSeekV4ClaudeThinkingSuffix(info *relaycommon.RelayInfo, request *d
 	if effort == "" {
 		request.OutputConfig = nil
 	} else {
+		// 主动降级非标准 effort 值（如 max → high），避免上游 SGLang 等引擎 400 报错
+		if downgraded, changed := reasoning.DowngradeReasoningEffort(effort); changed {
+			common.SysLog(fmt.Sprintf("proactively downgrading deepseek-v4 effort from %q to %q for upstream compatibility", effort, downgraded))
+			effort = downgraded
+		}
 		outputConfig, err := common.Marshal(map[string]string{
 			"effort": effort,
 		})

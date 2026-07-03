@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +18,8 @@ import (
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 
 	"github.com/gin-gonic/gin"
 )
@@ -56,12 +59,10 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		(strings.HasPrefix(request.Model, "claude-opus-4-6") ||
 			strings.HasPrefix(request.Model, "claude-opus-4-7") ||
 			strings.HasPrefix(request.Model, "claude-opus-4-8")) {
-		// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
-		if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) {
-			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
-				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading effort from %q to %q", effortLevel, downgraded))
-				effortLevel = downgraded
-			}
+		// 主动降级非标准 effort 值（如 max/xhigh → high），避免上游 SGLang 等引擎 400 报错
+		if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
+			logger.LogInfo(c, fmt.Sprintf("proactively downgrading effort from %q to %q for upstream compatibility", effortLevel, downgraded))
+			effortLevel = downgraded
 		}
 		request.Model = baseModel
 		request.Thinking = &dto.Thinking{
@@ -114,6 +115,18 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		info.UpstreamModelName = request.Model
 	}
 
+	// 主动降级 OutputConfig 中的非标准 effort 值（如 max/xhigh → high）
+	// 避免上游 SGLang 等引擎因 reasoning_effort 验证失败返回 400（400 不会触发重试）
+	if request.OutputConfig != nil && len(request.OutputConfig) > 0 {
+		var outputConfig dto.OutputConfigForEffort
+		if err := json.Unmarshal(request.OutputConfig, &outputConfig); err == nil && outputConfig.Effort != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(outputConfig.Effort); changed {
+				logger.LogInfo(c, fmt.Sprintf("proactively downgrading output_config.effort from %q to %q for upstream compatibility", outputConfig.Effort, downgraded))
+				request.OutputConfig = json.RawMessage(fmt.Sprintf(`{"effort":"%s"}`, downgraded))
+			}
+		}
+	}
+
 	if info.ChannelSetting.SystemPrompt != "" {
 		if request.System == nil {
 			request.SetStringSystem(info.ChannelSetting.SystemPrompt)
@@ -162,8 +175,26 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		info.UpstreamRequestBodySize = storage.Size()
-		requestBody = common.ReaderOnly(storage)
+		storageBytes, _ := storage.Bytes()
+		requestBodyData := storageBytes
+
+		// 主动降级 passthrough 请求体中的 output_config.effort 非标准值
+		effortVal := gjson.GetBytes(requestBodyData, "output_config.effort").String()
+		if effortVal != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortVal); changed {
+				logger.LogInfo(c, fmt.Sprintf("proactively downgrading passthrough output_config.effort from %q to %q for upstream compatibility", effortVal, downgraded))
+				requestBodyData, err = sjson.SetBytes(requestBodyData, "output_config.effort", downgraded)
+				if err != nil {
+					return types.NewError(fmt.Errorf("failed to update output_config.effort in passthrough body: %w", err), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+				}
+			}
+		}
+
+		if common.DebugEnabled {
+			logger.LogDebug(c, "requestBody: %s", requestBodyData)
+		}
+		info.UpstreamRequestBodySize = int64(len(requestBodyData))
+		requestBody = bytes.NewReader(requestBodyData)
 	} else {
 		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
 		if err != nil {

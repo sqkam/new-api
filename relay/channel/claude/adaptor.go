@@ -97,21 +97,19 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
-	if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) {
-		// 降级请求体中的 ReasoningEffort 字段
-		if request.ReasoningEffort != "" {
-			if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
-				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
-				request.ReasoningEffort = downgraded
-			}
+	// 主动降级非标准 effort 值（如 max/xhigh → high），避免上游 SGLang 等引擎 400 报错
+	// 400 不会触发重试，所以不能依赖 LastError 判断
+	if request.ReasoningEffort != "" {
+		if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
+			logger.LogInfo(c, fmt.Sprintf("proactively downgrading ReasoningEffort from %q to %q for upstream compatibility", request.ReasoningEffort, downgraded))
+			request.ReasoningEffort = downgraded
 		}
-		// 降级模型名中的非标准 effort 后缀（如 -max → -high）
-		if baseModel, effortLevel, ok := reasoning.TrimEffortSuffix(request.Model); ok && effortLevel != "" {
-			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
-				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading model effort suffix from %q to %q", effortLevel, downgraded))
-				request.Model = baseModel + "-" + downgraded
-			}
+	}
+	// 降级模型名中的非标准 effort 后缀（如 -max → -high）
+	if baseModel, effortLevel, ok := reasoning.TrimEffortSuffix(request.Model); ok && effortLevel != "" {
+		if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
+			logger.LogInfo(c, fmt.Sprintf("proactively downgrading model effort suffix from %q to %q for upstream compatibility", effortLevel, downgraded))
+			request.Model = baseModel + "-" + downgraded
 		}
 	}
 	return RequestOpenAI2ClaudeMessage(c, *request)

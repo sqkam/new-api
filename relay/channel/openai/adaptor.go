@@ -239,9 +239,9 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 			request.Usage = json.RawMessage(`{"include":true}`)
 		}
 		// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
-		if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) && request.ReasoningEffort != "" {
+		if request.ReasoningEffort != "" {
 			if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
-				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
+				logger.LogInfo(c, fmt.Sprintf("proactively downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
 				request.ReasoningEffort = downgraded
 			}
 		}
@@ -346,9 +346,9 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 		}
 
 		// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
-		if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) && request.ReasoningEffort != "" {
+		if request.ReasoningEffort != "" {
 			if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
-				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
+				logger.LogInfo(c, fmt.Sprintf("proactively downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
 				request.ReasoningEffort = downgraded
 			}
 		}
