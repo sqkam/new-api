@@ -3172,6 +3172,31 @@ export function ChannelMutateDrawer({
                                     </FormItem>
                                   )}
                                 />
+
+                                <FormField
+                                  control={form.control}
+                                  name='effort_downgrade_enabled'
+                                  render={({ field }) => (
+                                    <FormItem className='flex items-center justify-between gap-3 px-4 py-3'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel className='text-sm'>
+                                          {t('Effort downgrade')}
+                                        </FormLabel>
+                                        <FormDescription>
+                                          {t(
+                                            'Downgrade non-standard reasoning_effort values (e.g. max→high) for upstream compatibility'
+                                          )}
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
                               </>
                             )}
                           </div>

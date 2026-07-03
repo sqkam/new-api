@@ -115,9 +115,9 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		info.UpstreamModelName = request.Model
 	}
 
-	// 主动降级 OutputConfig 中的非标准 effort 值（如 max/xhigh → high）
+	// 当渠道开启 effort 降级时，主动降级 OutputConfig 中的非标准 effort 值（如 max/xhigh → high）
 	// 避免上游 SGLang 等引擎因 reasoning_effort 验证失败返回 400（400 不会触发重试）
-	if request.OutputConfig != nil && len(request.OutputConfig) > 0 {
+	if info.ChannelOtherSettings.EffortDowngradeEnabled && request.OutputConfig != nil && len(request.OutputConfig) > 0 {
 		var outputConfig dto.OutputConfigForEffort
 		if err := json.Unmarshal(request.OutputConfig, &outputConfig); err == nil && outputConfig.Effort != "" {
 			if downgraded, changed := reasoning.DowngradeReasoningEffort(outputConfig.Effort); changed {
@@ -178,14 +178,16 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		storageBytes, _ := storage.Bytes()
 		requestBodyData := storageBytes
 
-		// 主动降级 passthrough 请求体中的 output_config.effort 非标准值
-		effortVal := gjson.GetBytes(requestBodyData, "output_config.effort").String()
-		if effortVal != "" {
-			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortVal); changed {
-				logger.LogInfo(c, fmt.Sprintf("proactively downgrading passthrough output_config.effort from %q to %q for upstream compatibility", effortVal, downgraded))
-				requestBodyData, err = sjson.SetBytes(requestBodyData, "output_config.effort", downgraded)
-				if err != nil {
-					return types.NewError(fmt.Errorf("failed to update output_config.effort in passthrough body: %w", err), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		// 当渠道开启 effort 降级时，主动降级 passthrough 请求体中的 output_config.effort 非标准值
+		if info.ChannelOtherSettings.EffortDowngradeEnabled {
+			effortVal := gjson.GetBytes(requestBodyData, "output_config.effort").String()
+			if effortVal != "" {
+				if downgraded, changed := reasoning.DowngradeReasoningEffort(effortVal); changed {
+					logger.LogInfo(c, fmt.Sprintf("proactively downgrading passthrough output_config.effort from %q to %q for upstream compatibility", effortVal, downgraded))
+					requestBodyData, err = sjson.SetBytes(requestBodyData, "output_config.effort", downgraded)
+					if err != nil {
+						return types.NewError(fmt.Errorf("failed to update output_config.effort in passthrough body: %w", err), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+					}
 				}
 			}
 		}

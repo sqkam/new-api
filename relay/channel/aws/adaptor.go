@@ -118,16 +118,18 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 		return nil, errors.New("request is nil")
 	}
 	// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
-	if request.ReasoningEffort != "" {
+	if info.ChannelOtherSettings.EffortDowngradeEnabled && request.ReasoningEffort != "" {
 		if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
 			logger.LogInfo(c, fmt.Sprintf("proactively downgrading ReasoningEffort from %q to %q for upstream compatibility", request.ReasoningEffort, downgraded))
 			request.ReasoningEffort = downgraded
 		}
 	}
-	if baseModel, effortLevel, ok := reasoning.TrimEffortSuffix(request.Model); ok && effortLevel != "" {
-		if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
-			logger.LogInfo(c, fmt.Sprintf("proactively downgrading model effort suffix from %q to %q for upstream compatibility", effortLevel, downgraded))
-			request.Model = baseModel + "-" + downgraded
+	if info.ChannelOtherSettings.EffortDowngradeEnabled {
+		if baseModel, effortLevel, ok := reasoning.TrimEffortSuffix(request.Model); ok && effortLevel != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
+				logger.LogInfo(c, fmt.Sprintf("proactively downgrading model effort suffix from %q to %q for upstream compatibility", effortLevel, downgraded))
+				request.Model = baseModel + "-" + downgraded
+			}
 		}
 	}
 	// 检查是否为Nova模型

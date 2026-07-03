@@ -99,17 +99,19 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	}
 	// 主动降级非标准 effort 值（如 max/xhigh → high），避免上游 SGLang 等引擎 400 报错
 	// 400 不会触发重试，所以不能依赖 LastError 判断
-	if request.ReasoningEffort != "" {
+	if info.ChannelOtherSettings.EffortDowngradeEnabled && request.ReasoningEffort != "" {
 		if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
 			logger.LogInfo(c, fmt.Sprintf("proactively downgrading ReasoningEffort from %q to %q for upstream compatibility", request.ReasoningEffort, downgraded))
 			request.ReasoningEffort = downgraded
 		}
 	}
 	// 降级模型名中的非标准 effort 后缀（如 -max → -high）
-	if baseModel, effortLevel, ok := reasoning.TrimEffortSuffix(request.Model); ok && effortLevel != "" {
-		if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
-			logger.LogInfo(c, fmt.Sprintf("proactively downgrading model effort suffix from %q to %q for upstream compatibility", effortLevel, downgraded))
-			request.Model = baseModel + "-" + downgraded
+	if info.ChannelOtherSettings.EffortDowngradeEnabled {
+		if baseModel, effortLevel, ok := reasoning.TrimEffortSuffix(request.Model); ok && effortLevel != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
+				logger.LogInfo(c, fmt.Sprintf("proactively downgrading model effort suffix from %q to %q for upstream compatibility", effortLevel, downgraded))
+				request.Model = baseModel + "-" + downgraded
+			}
 		}
 	}
 	return RequestOpenAI2ClaudeMessage(c, *request)

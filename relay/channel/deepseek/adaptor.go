@@ -108,8 +108,8 @@ func applyDeepSeekV4OpenAIThinkingSuffix(info *relaycommon.RelayInfo, request *d
 	}
 	request.Model = baseModel
 	request.THINKING = thinking
-	// 主动降级非标准 effort 值（如 max → high），避免上游 SGLang 等引擎 400 报错
-	if effort != "" {
+	// 当渠道开启 effort 降级时，主动降级非标准 effort 值（如 max → high），避免上游 SGLang 等引擎 400 报错
+	if info != nil && info.ChannelOtherSettings.EffortDowngradeEnabled && effort != "" {
 		if downgraded, changed := reasoning.DowngradeReasoningEffort(effort); changed {
 			common.SysLog(fmt.Sprintf("proactively downgrading deepseek-v4 ReasoningEffort from %q to %q for upstream compatibility", effort, downgraded))
 			effort = downgraded

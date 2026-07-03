@@ -158,10 +158,7 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 			strings.HasPrefix(textRequest.Model, "claude-opus-4-7") ||
 			strings.HasPrefix(textRequest.Model, "claude-opus-4-8")) {
 		// 主动降级非标准 effort 值（如 max/xhigh → high），避免上游 400 报错
-		if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
-			logger.LogInfo(c, fmt.Sprintf("proactively downgrading effort from %q to %q for upstream compatibility", effortLevel, downgraded))
-			effortLevel = downgraded
-		}
+		// 注意：此处无法获取渠道设置，降级由上层 adaptor/claude_handler 负责
 		claudeRequest.Model = baseModel
 		claudeRequest.Thinking = &dto.Thinking{
 			Type: "adaptive",
@@ -209,14 +206,6 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 		}
 		if !model_setting.ShouldPreserveThinkingSuffix(textRequest.Model) {
 			claudeRequest.Model = trimmedModel
-		}
-	}
-
-	// 主动降级非标准 ReasoningEffort 值（如 max/xhigh → high），避免上游 400 报错
-	if textRequest.ReasoningEffort != "" {
-		if downgraded, changed := reasoning.DowngradeReasoningEffort(textRequest.ReasoningEffort); changed {
-			logger.LogInfo(c, fmt.Sprintf("proactively downgrading ReasoningEffort from %q to %q for upstream compatibility", textRequest.ReasoningEffort, downgraded))
-			textRequest.ReasoningEffort = downgraded
 		}
 	}
 
