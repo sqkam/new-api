@@ -238,6 +238,13 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 		if len(request.Usage) == 0 {
 			request.Usage = json.RawMessage(`{"include":true}`)
 		}
+		// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
+		if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) && request.ReasoningEffort != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
+				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
+				request.ReasoningEffort = downgraded
+			}
+		}
 		// 适配 OpenRouter 的 thinking 后缀
 		if !model_setting.ShouldPreserveThinkingSuffix(info.OriginModelName) &&
 			strings.HasSuffix(info.UpstreamModelName, "-thinking") {
@@ -336,6 +343,14 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 			request.ReasoningEffort = effort
 			info.UpstreamModelName = originModel
 			request.Model = originModel
+		}
+
+		// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
+		if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) && request.ReasoningEffort != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
+				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
+				request.ReasoningEffort = downgraded
+			}
 		}
 
 		info.ReasoningEffort = request.ReasoningEffort

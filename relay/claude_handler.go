@@ -56,6 +56,13 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		(strings.HasPrefix(request.Model, "claude-opus-4-6") ||
 			strings.HasPrefix(request.Model, "claude-opus-4-7") ||
 			strings.HasPrefix(request.Model, "claude-opus-4-8")) {
+		// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
+		if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
+				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading effort from %q to %q", effortLevel, downgraded))
+				effortLevel = downgraded
+			}
+		}
 		request.Model = baseModel
 		request.Thinking = &dto.Thinking{
 			Type: "adaptive",

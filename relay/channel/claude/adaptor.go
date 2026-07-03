@@ -8,9 +8,11 @@ import (
 	"net/url"
 
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -94,6 +96,13 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
+	}
+	// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
+	if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) && request.ReasoningEffort != "" {
+		if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
+			logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
+			request.ReasoningEffort = downgraded
+		}
 	}
 	return RequestOpenAI2ClaudeMessage(c, *request)
 }
