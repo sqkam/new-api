@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/pkg/errors"
@@ -114,6 +116,21 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
+	}
+	// 当上次请求因 reasoning_effort 验证错误失败时，自动降级为上游支持的最高标准档位
+	if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) {
+		if request.ReasoningEffort != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(request.ReasoningEffort); changed {
+				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading ReasoningEffort from %q to %q", request.ReasoningEffort, downgraded))
+				request.ReasoningEffort = downgraded
+			}
+		}
+		if baseModel, effortLevel, ok := reasoning.TrimEffortSuffix(request.Model); ok && effortLevel != "" {
+			if downgraded, changed := reasoning.DowngradeReasoningEffort(effortLevel); changed {
+				logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected, downgrading model effort suffix from %q to %q", effortLevel, downgraded))
+				request.Model = baseModel + "-" + downgraded
+			}
+		}
 	}
 	// 检查是否为Nova模型
 	if isNovaModel(request.Model) {

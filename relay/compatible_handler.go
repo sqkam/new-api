@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,8 +17,11 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 
 	"github.com/gin-gonic/gin"
 )
@@ -99,12 +103,27 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		if common.DebugEnabled {
-			if debugBytes, bErr := storage.Bytes(); bErr == nil {
-				logger.LogDebug(c, "requestBody: %s", debugBytes)
+		storageBytes, _ := storage.Bytes()
+		requestBodyData := storageBytes
+
+		// 当上次请求因 reasoning_effort 验证错误失败时，自动降级请求体中的 reasoning_effort 字段
+		if info.LastError != nil && reasoning.IsReasoningEffortValidationError(info.LastError.Error()) {
+			effortVal := gjson.GetBytes(requestBodyData, "reasoning_effort").String()
+			if effortVal != "" {
+				if downgraded, changed := reasoning.DowngradeReasoningEffort(effortVal); changed {
+					logger.LogInfo(c, fmt.Sprintf("reasoning_effort validation error detected (passthrough), downgrading reasoning_effort from %q to %q", effortVal, downgraded))
+					requestBodyData, err = sjson.SetBytes(requestBodyData, "reasoning_effort", downgraded)
+					if err != nil {
+						return types.NewError(fmt.Errorf("failed to update reasoning_effort in passthrough body: %w", err), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+					}
+				}
 			}
 		}
-		requestBody = common.ReaderOnly(storage)
+
+		if common.DebugEnabled {
+			logger.LogDebug(c, "requestBody: %s", requestBodyData)
+		}
+		requestBody = bytes.NewReader(requestBodyData)
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, info, request)
 		if err != nil {
