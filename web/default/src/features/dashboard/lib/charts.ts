@@ -24,6 +24,7 @@ import type {
   QuotaDataItem,
   ProcessedChartData,
   ProcessedUserChartData,
+  ProcessedTokenChartData,
 } from '@/features/dashboard/types'
 
 type TFunction = (key: string) => string
@@ -948,6 +949,336 @@ export function processUserChartData(
       color: { specified: userColorMap },
       background: { fill: 'transparent' },
       animation: true,
+    },
+  }
+}
+
+export function processTokenChartData(
+  data: QuotaDataItem[],
+  timeGranularity: TimeGranularity = 'day',
+  t?: TFunction,
+  limit = 10
+): ProcessedTokenChartData {
+  const tt: TFunction = t ?? ((x) => x)
+  const { config } = getCurrencyDisplay()
+  const quotaPerUnit = config.quotaPerUnit
+
+  const formatVal = (raw: number) => renderQuotaCompat(raw, 2)
+  const formatInt = (value: number) =>
+    Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
+
+  const emptyResult: ProcessedTokenChartData = {
+    spec_token_rank: {
+      type: 'bar',
+      data: [{ id: 'tokenRankData', values: [] }],
+      xField: 'rawQuota',
+      yField: 'Token',
+      seriesField: 'Token',
+      direction: 'horizontal',
+      title: { visible: true, text: tt('API Key Consumption Ranking'), subtext: tt('No data available') },
+      legends: { visible: false },
+      color: { type: 'ordinal', range: USER_COLORS },
+      background: { fill: 'transparent' },
+    },
+    spec_token_trend: {
+      type: 'area',
+      data: [{ id: 'tokenTrendData', values: [] }],
+      xField: 'Time',
+      yField: 'rawQuota',
+      seriesField: 'Token',
+      title: { visible: true, text: tt('API Key Consumption Trend'), subtext: tt('No data available') },
+      legends: { visible: true, selectMode: 'single' },
+      color: { type: 'ordinal', range: USER_COLORS },
+      point: { visible: false },
+      background: { fill: 'transparent' },
+    },
+    spec_token_count_rank: {
+      type: 'bar',
+      data: [{ id: 'tokenCountRankData', values: [] }],
+      xField: 'Count',
+      yField: 'Token',
+      seriesField: 'Token',
+      direction: 'horizontal',
+      title: { visible: true, text: tt('API Key Request Count Ranking'), subtext: tt('No data available') },
+      legends: { visible: false },
+      color: { type: 'ordinal', range: USER_COLORS },
+      background: { fill: 'transparent' },
+    },
+    spec_token_count_trend: {
+      type: 'area',
+      data: [{ id: 'tokenCountTrendData', values: [] }],
+      xField: 'Time',
+      yField: 'Count',
+      seriesField: 'Token',
+      title: { visible: true, text: tt('API Key Request Count Trend'), subtext: tt('No data available') },
+      legends: { visible: true, selectMode: 'single' },
+      color: { type: 'ordinal', range: USER_COLORS },
+      point: { visible: false },
+      background: { fill: 'transparent' },
+    },
+    spec_token_token_rank: {
+      type: 'bar',
+      data: [{ id: 'tokenTokenRankData', values: [] }],
+      xField: 'Tokens',
+      yField: 'Token',
+      seriesField: 'Token',
+      direction: 'horizontal',
+      title: { visible: true, text: tt('API Key Token Usage Ranking'), subtext: tt('No data available') },
+      legends: { visible: false },
+      color: { type: 'ordinal', range: USER_COLORS },
+      background: { fill: 'transparent' },
+    },
+    spec_token_token_trend: {
+      type: 'area',
+      data: [{ id: 'tokenTokenTrendData', values: [] }],
+      xField: 'Time',
+      yField: 'Tokens',
+      seriesField: 'Token',
+      title: { visible: true, text: tt('API Key Token Usage Trend'), subtext: tt('No data available') },
+      legends: { visible: true, selectMode: 'single' },
+      color: { type: 'ordinal', range: USER_COLORS },
+      point: { visible: false },
+      background: { fill: 'transparent' },
+    },
+  }
+
+  if (!data || data.length === 0) return emptyResult
+
+  // Resolve token label: prefer token_name from backend, fall back to token_id
+  const getTokenLabel = (item: QuotaDataItem) =>
+    item.token_name || `Key-${item.token_id || 'unknown'}`
+
+  // Aggregate totals per token for all three metrics
+  const tokenQuotaTotal = new Map<string, number>()
+  const tokenCountTotal = new Map<string, number>()
+  const tokenTokenTotal = new Map<string, number>()
+  data.forEach((item) => {
+    const tokenLabel = getTokenLabel(item)
+    tokenQuotaTotal.set(tokenLabel, (tokenQuotaTotal.get(tokenLabel) || 0) + (Number(item.quota) || 0))
+    tokenCountTotal.set(tokenLabel, (tokenCountTotal.get(tokenLabel) || 0) + (Number(item.count) || 0))
+    tokenTokenTotal.set(tokenLabel, (tokenTokenTotal.get(tokenLabel) || 0) + (Number(item.token_used) || 0))
+  })
+
+  // Select top N tokens by quota (primary ranking dimension)
+  const sortedByQuota = Array.from(tokenQuotaTotal.entries()).sort((a, b) => b[1] - a[1])
+  const topTokens = sortedByQuota.slice(0, limit).map(([t]) => t)
+  const topTokenSet = new Set(topTokens)
+  const totalQuota = sortedByQuota.slice(0, limit).reduce((s, [, q]) => s + q, 0)
+  const totalCount = topTokens.reduce((s, t) => s + (tokenCountTotal.get(t) || 0), 0)
+  const totalTokens = topTokens.reduce((s, t) => s + (tokenTokenTotal.get(t) || 0), 0)
+
+  const tokenColorMap = topTokens.reduce<Record<string, string>>(
+    (acc, token, i) => {
+      acc[token] = USER_COLORS[i % USER_COLORS.length]
+      return acc
+    },
+    {}
+  )
+
+  // ---- Quota rank ----
+  const quotaRankValues = sortedByQuota.slice(0, limit).map(([tokenLabel, quota]) => ({
+    Token: tokenLabel,
+    rawQuota: quota,
+    Usage: Number((quota / quotaPerUnit).toFixed(4)),
+  }))
+
+  // ---- Count rank ----
+  const sortedByCount = topTokens
+    .map((t) => [t, tokenCountTotal.get(t) || 0] as [string, number])
+    .sort((a, b) => b[1] - a[1])
+  const countRankValues = sortedByCount.map(([tokenLabel, count]) => ({
+    Token: tokenLabel,
+    Count: count,
+  }))
+
+  // ---- Token used rank ----
+  const sortedByToken = topTokens
+    .map((t) => [t, tokenTokenTotal.get(t) || 0] as [string, number])
+    .sort((a, b) => b[1] - a[1])
+  const tokenRankValues = sortedByToken.map(([tokenLabel, tokens]) => ({
+    Token: tokenLabel,
+    Tokens: tokens,
+  }))
+
+  // ---- Time-based trend data for all three metrics ----
+  const timeTokenQuotaMap = new Map<string, Map<string, number>>()
+  const timeTokenCountMap = new Map<string, Map<string, number>>()
+  const timeTokenTokenMap = new Map<string, Map<string, number>>()
+  const allTimePoints = new Set<string>()
+
+  data.forEach((item) => {
+    const ts = Number(item.created_at)
+    const timeKey = formatChartTime(ts, timeGranularity)
+    allTimePoints.add(timeKey)
+    const tokenLabel = getTokenLabel(item)
+    if (!topTokenSet.has(tokenLabel)) return
+
+    if (!timeTokenQuotaMap.has(timeKey)) timeTokenQuotaMap.set(timeKey, new Map())
+    if (!timeTokenCountMap.has(timeKey)) timeTokenCountMap.set(timeKey, new Map())
+    if (!timeTokenTokenMap.has(timeKey)) timeTokenTokenMap.set(timeKey, new Map())
+
+    const qm = timeTokenQuotaMap.get(timeKey)!
+    qm.set(tokenLabel, (qm.get(tokenLabel) || 0) + (Number(item.quota) || 0))
+    const cm = timeTokenCountMap.get(timeKey)!
+    cm.set(tokenLabel, (cm.get(tokenLabel) || 0) + (Number(item.count) || 0))
+    const tm = timeTokenTokenMap.get(timeKey)!
+    tm.set(tokenLabel, (tm.get(tokenLabel) || 0) + (Number(item.token_used) || 0))
+  })
+
+  const sortedTimePoints = Array.from(allTimePoints).sort()
+
+  // Quota trend
+  const quotaTrendValues: Array<{ Time: string; Token: string; rawQuota: number; Usage: number }> = []
+  // Count trend
+  const countTrendValues: Array<{ Time: string; Token: string; Count: number }> = []
+  // Token trend
+  const tokenTrendValues: Array<{ Time: string; Token: string; Tokens: number }> = []
+
+  sortedTimePoints.forEach((time) => {
+    topTokens.forEach((token) => {
+      const q = timeTokenQuotaMap.get(time)?.get(token) || 0
+      quotaTrendValues.push({ Time: time, Token: token, rawQuota: q, Usage: Number((q / quotaPerUnit).toFixed(4)) })
+      const c = timeTokenCountMap.get(time)?.get(token) || 0
+      countTrendValues.push({ Time: time, Token: token, Count: c })
+      const tk = timeTokenTokenMap.get(time)?.get(token) || 0
+      tokenTrendValues.push({ Time: time, Token: token, Tokens: tk })
+    })
+  })
+
+  // ---- Shared chart building blocks ----
+  const rankBarBase = {
+    direction: 'horizontal' as const,
+    legends: { visible: false },
+    bar: { state: { hover: { stroke: '#000', lineWidth: 1 } } },
+    axes: [
+      { orient: 'left' as const, type: 'band' as const },
+      { orient: 'bottom' as const, type: 'linear' as const, visible: false },
+    ],
+    color: { specified: tokenColorMap },
+    background: { fill: 'transparent' },
+    animation: true,
+  }
+
+  const trendAreaBase = {
+    stack: false,
+    legends: { visible: true, selectMode: 'single' as const },
+    axes: [
+      { orient: 'bottom' as const, type: 'band' as const },
+      { orient: 'left' as const, type: 'linear' as const },
+    ],
+    area: { style: { fillOpacity: 0.15, curveType: 'monotone' as const } },
+    line: { style: { lineWidth: 2, curveType: 'monotone' as const } },
+    point: { visible: false },
+    color: { specified: tokenColorMap },
+    background: { fill: 'transparent' },
+    animation: true,
+  }
+
+  const makeNumberTooltipUpdateContent = (formatFn: (v: number) => string) =>
+    (array: Array<{ key: string; value: string | number }>) => {
+      array.sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+      let sum = 0
+      for (let i = 0; i < array.length; i++) {
+        const v = Number(array[i].value) || 0
+        sum += v
+        array[i].value = formatFn(v)
+      }
+      array.unshift({ key: tt('Total:'), value: formatFn(sum) })
+      return array
+    }
+
+  return {
+    spec_token_rank: {
+      type: 'bar',
+      data: [{ id: 'tokenRankData', values: quotaRankValues }],
+      xField: 'rawQuota',
+      yField: 'Token',
+      seriesField: 'Token',
+      ...rankBarBase,
+      title: { visible: true, text: tt('API Key Consumption Ranking'), subtext: `${tt('Total:')} ${formatVal(totalQuota)}` },
+      label: { visible: true, position: 'outside', formatMethod: (value: number) => formatVal(value), style: { fontSize: 11 } },
+      tooltip: {
+        mark: {
+          content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => formatVal(Number(datum?.rawQuota) || 0) }],
+          updateContent: (array: Array<{ key: string; value: string | number; datum?: Record<string, unknown> }>) => {
+            for (let i = 0; i < array.length; i++) {
+              const rawQuota = array[i].datum?.rawQuota
+              const value = rawQuota === undefined ? array[i].value : Number(rawQuota)
+              array[i].value = formatVal(Number(value) || 0)
+            }
+            return array
+          },
+        },
+      },
+    },
+    spec_token_trend: {
+      type: 'area',
+      data: [{ id: 'tokenTrendData', values: quotaTrendValues }],
+      xField: 'Time',
+      yField: 'rawQuota',
+      seriesField: 'Token',
+      ...trendAreaBase,
+      title: { visible: true, text: tt('API Key Consumption Trend'), subtext: `${tt('Total:')} ${formatVal(totalQuota)}` },
+      axes: [
+        { orient: 'bottom' as const, type: 'band' as const },
+        { orient: 'left' as const, type: 'linear' as const, label: { formatMethod: (value: number) => formatVal(value) } },
+      ],
+      tooltip: {
+        mark: { content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => formatVal(Number(datum?.rawQuota) || 0) }] },
+        dimension: { content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => Number(datum?.rawQuota) || 0 }], updateContent: makeNumberTooltipUpdateContent(formatVal) },
+      },
+    },
+    spec_token_count_rank: {
+      type: 'bar',
+      data: [{ id: 'tokenCountRankData', values: countRankValues }],
+      xField: 'Count',
+      yField: 'Token',
+      seriesField: 'Token',
+      ...rankBarBase,
+      title: { visible: true, text: tt('API Key Request Count Ranking'), subtext: `${tt('Total:')} ${formatInt(totalCount)}` },
+      label: { visible: true, position: 'outside', formatMethod: (value: number) => formatInt(value), style: { fontSize: 11 } },
+      tooltip: {
+        mark: { content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => formatInt(Number(datum?.Count) || 0) }] },
+      },
+    },
+    spec_token_count_trend: {
+      type: 'area',
+      data: [{ id: 'tokenCountTrendData', values: countTrendValues }],
+      xField: 'Time',
+      yField: 'Count',
+      seriesField: 'Token',
+      ...trendAreaBase,
+      title: { visible: true, text: tt('API Key Request Count Trend'), subtext: `${tt('Total:')} ${formatInt(totalCount)}` },
+      tooltip: {
+        mark: { content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => formatInt(Number(datum?.Count) || 0) }] },
+        dimension: { content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => Number(datum?.Count) || 0 }], updateContent: makeNumberTooltipUpdateContent(formatInt) },
+      },
+    },
+    spec_token_token_rank: {
+      type: 'bar',
+      data: [{ id: 'tokenTokenRankData', values: tokenRankValues }],
+      xField: 'Tokens',
+      yField: 'Token',
+      seriesField: 'Token',
+      ...rankBarBase,
+      title: { visible: true, text: tt('API Key Token Usage Ranking'), subtext: `${tt('Total:')} ${formatInt(totalTokens)}` },
+      label: { visible: true, position: 'outside', formatMethod: (value: number) => formatInt(value), style: { fontSize: 11 } },
+      tooltip: {
+        mark: { content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => formatInt(Number(datum?.Tokens) || 0) }] },
+      },
+    },
+    spec_token_token_trend: {
+      type: 'area',
+      data: [{ id: 'tokenTokenTrendData', values: tokenTrendValues }],
+      xField: 'Time',
+      yField: 'Tokens',
+      seriesField: 'Token',
+      ...trendAreaBase,
+      title: { visible: true, text: tt('API Key Token Usage Trend'), subtext: `${tt('Total:')} ${formatInt(totalTokens)}` },
+      tooltip: {
+        mark: { content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => formatInt(Number(datum?.Tokens) || 0) }] },
+        dimension: { content: [{ key: (datum: Record<string, unknown>) => datum?.Token, value: (datum: Record<string, unknown>) => Number(datum?.Tokens) || 0 }], updateContent: makeNumberTooltipUpdateContent(formatInt) },
+      },
     },
   }
 }

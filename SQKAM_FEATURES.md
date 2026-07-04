@@ -1,6 +1,6 @@
 # SQKAM Branch — 自定义功能说明
 
-> 最后更新: 2026-07-04（新增渠道级别 reasoning_effort 降级开关）
+> 最后更新: 2026-07-04（新增 API Key 维度 Dashboard 消耗趋势图表）
 > 当前基准: `sqkam` 已合并至 `origin/main` commit `d10fc762`
 > 最新 main: `origin/main` commit `d10fc762`
 > 同步状态: 2026-06-27 已执行 `git fetch origin main` 和 `git merge origin/main`；冲突文件为 `docker-compose.yml`、`makefile`、`web/classic/bun.lock`。`docker-compose.yml` 保留 sqkam 精简版（SQLite + redis + `sqkam/new-api` 镜像 + IPv6 网络）；`makefile` 保留 sqkam 的 build/docker 目标与 `sqkam/new-api` 镜像名，接入 main 的共享 `web` workspace 安装方式；`web/classic/bun.lock` 按 main 删除（已迁移到共享 `web/bun.lock`）。
@@ -212,7 +212,52 @@ make container-image
 - 公网服务器上 `xianyu-auto-reply-fix_xianyu-network` 占用 `172.20.0.0/16`，与原配置冲突
 - 改为 `172.22.0.0/16`，内网服务器无此冲突但统一配置
 
-### 10. 渠道级别 reasoning_effort 降级 (Effort Downgrade)
+### 10. API Key 维度 Dashboard 消耗趋势
+
+**问题背景:** 数据看板有用户维度的消耗趋势（调用次数、Token 数、花费），但没有 API Key 维度的消耗趋势，无法按 Key 粒度查看调用情况。
+
+**解决方案:** 新增 API Key 维度的排行榜和趋势图，完全复用现有 `quota_data` 表中的 `token_id` 维度，后端查询时 GROUP BY `token_id, created_at` 并关联 `tokens` 表解析 Key 名称。
+
+**后端新增:**
+
+| 文件 | 说明 |
+|------|------|
+| `model/usedata.go` | `QuotaData` 结构体新增 `TokenName` 字段（`gorm:"-"` 不持久化）；新增 `GetQuotaDataGroupByToken()` 按 `token_id, created_at` 聚合查询；新增 `fillQuotaDataTokenNames()` 批量解析 token 名称 |
+| `controller/usedata.go` | 新增 `GetQuotaDatesByToken()` handler |
+| `router/api-router.go` | 新增 `GET /api/data/tokens` 路由（AdminAuth） |
+
+**前端（web/default）新增:**
+
+| 文件 | 说明 |
+|------|------|
+| `features/dashboard/components/tokens/token-charts.tsx` | **新增** — API Key 图表组件（排行 + 趋势，复用 VChart area/bar 图表，支持时间范围/粒度/Top N 筛选） |
+| `features/dashboard/api.ts` | 新增 `getTokenQuotaData()` API 调用（`GET /api/data/tokens`） |
+| `features/dashboard/lib/charts.ts` | 新增 `processTokenChartData()` 数据处理函数 |
+| `features/dashboard/types.ts` | 新增 `TokenChartsFilters`、`ProcessedTokenChartData` 类型；`QuotaDataItem` 新增 `token_id`/`token_name` 字段 |
+| `features/dashboard/section-registry.tsx` | 新增 `tokens` section（adminOnly） |
+| `features/dashboard/index.tsx` | 接入 API Key 图表 section |
+| `features/dashboard/lib/index.ts` | 导出 `processTokenChartData` |
+
+**前端（web/classic）新增:**
+
+| 文件 | 说明 |
+|------|------|
+| `helpers/dashboard.jsx` | 新增 `processTokenKeyData()` API Key 维度数据处理函数 |
+| `hooks/dashboard/useDashboardCharts.jsx` | 新增 `spec_tokenkey_rank` / `spec_tokenkey_trend` 图表规格 + `updateTokenKeyChartData()` 处理函数 |
+| `hooks/dashboard/useDashboardData.js` | 新增 `loadTokenKeyQuotaData()` API 调用函数 |
+| `components/dashboard/ChartsPanel.jsx` | 新增"API Key消耗排行" / "API Key消耗趋势"两个 Tab |
+| `components/dashboard/index.jsx` | 接入 API Key 数据加载 + 透传图表规格 |
+
+**i18n:** 所有 locale 文件（en/zh/ja/fr/ru/vi/zh-CN/zh-TW）已添加 API Key 统计相关翻译。
+
+**行为:**
+- 仅管理员可见（adminOnly section）
+- 支持时间范围选择（1天/7天/14天/29天）、时间粒度（小时/天/周）、Top N（5/10/20/50）
+- API Key 排行：横向柱状图，按消耗额度排序，显示 Key 名称
+- API Key 趋势：面积图，展示 Top N Key 随时间的消耗变化
+- 已删除的 Key 显示为 `Key-{token_id}`
+
+### 11. 渠道级别 reasoning_effort 降级 (Effort Downgrade)
 
 **问题背景:** 部分上游（如 MaaS/SGLang）不支持非标准 `reasoning_effort` 值（如 `max`、`xhigh`），只接受 `low`/`medium`/`high`，收到非标准值会返回 400 错误。而 400 状态码不触发自动重试，导致基于重试的降级逻辑永远不会执行。
 
@@ -336,6 +381,15 @@ sqkam 分支的前端基于 `web/classic/`（React 18 + Semi Design），**不�
 | `router/api-router.go` | **中** | API 路由注册 |
 | `web/classic/.../EditTokenModal.jsx` | **高** | 前端 Token 编辑表单（含 `loadedTokenRef` 回填修复 2026-06-28） |
 | `web/classic/.../useDashboardCharts.jsx` | **中** | Dashboard 图表规格 |
+| `web/classic/.../useDashboardData.js` | **中** | API Key 数据加载函数（2026-07-04） |
+| `web/classic/.../ChartsPanel.jsx` | **中** | API Key 图表 Tab（2026-07-04） |
+| `web/classic/.../helpers/dashboard.jsx` | **中** | processTokenKeyData 数据处理（2026-07-04） |
+| `model/usedata.go` | **中** | QuotaData TokenName 字段 + GetQuotaDataGroupByToken + fillQuotaDataTokenNames（2026-07-04） |
+| `controller/usedata.go` | **低** | GetQuotaDatesByToken handler（2026-07-04） |
+| `web/default/.../dashboard/lib/charts.ts` | **中** | processTokenChartData 函数（2026-07-04） |
+| `web/default/.../dashboard/section-registry.tsx` | **低** | tokens section（2026-07-04） |
+| `web/default/.../dashboard/index.tsx` | **中** | Dashboard 接入 API Key section（2026-07-04） |
+| `web/default/.../dashboard/types.ts` | **低** | TokenChartsFilters/ProcessedTokenChartData 类型（2026-07-04） |
 | `web/default/src/features/keys/types.ts` | **中** | apiKeySchema 透传字段（2026-06-28） |
 | `web/default/src/features/keys/components/api-keys-mutate-drawer.tsx` | **中** | fetchedTokenRef 透传逻辑（2026-06-28） |
 | `dto/channel_settings.go` | **中** | ChannelOtherSettings 新增 EffortDowngradeEnabled（2026-07-04） |
@@ -373,6 +427,11 @@ rg -c "RecordFirstCallTime" router/video-router.go  # 应 >= 3（video/kling/jim
 rg -c "rate_limit" web/classic/src/components/table/tokens/modals/EditTokenModal.jsx  # 应 >= 18
 rg -c "loadedTokenRef" web/classic/src/components/table/tokens/modals/EditTokenModal.jsx  # 应 >= 3（2026-06-28 回填修复）
 rg -c "spec_token" web/classic/src/hooks/dashboard/useDashboardCharts.jsx  # 应 >= 4
+rg -c "spec_tokenkey" web/classic/src/hooks/dashboard/useDashboardCharts.jsx  # 应 >= 4（2026-07-04）
+rg -c "loadTokenKeyQuotaData" web/classic/src/hooks/dashboard/useDashboardData.js  # 应 >= 2（2026-07-04）
+rg -n "GetQuotaDataGroupByToken" model/usedata.go  # 应存在（2026-07-04）
+rg -n "fillQuotaDataTokenNames" model/usedata.go  # 应存在（2026-07-04）
+rg -c "processTokenChartData" web/default/src/features/dashboard/lib/charts.ts  # 应 >= 2（2026-07-04）
 test -f web/classic/src/helpers/token.js     # 应存在
 # Effort 降级功能（2026-07-04）
 rg -n "EffortDowngradeEnabled" dto/channel_settings.go  # 应存在

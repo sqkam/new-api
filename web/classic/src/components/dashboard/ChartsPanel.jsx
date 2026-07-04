@@ -33,6 +33,12 @@ const ChartsPanel = ({
   spec_token_rank_bar,
   spec_user_rank,
   spec_user_trend,
+  spec_tokenkey_rank,
+  spec_tokenkey_trend,
+  spec_tokenkey_count_rank,
+  spec_tokenkey_count_trend,
+  spec_tokenkey_token_rank,
+  spec_tokenkey_token_trend,
   isAdminUser,
   CARD_PROPS,
   CHART_CONFIG,
@@ -67,6 +73,24 @@ const ChartsPanel = ({
             {isAdminUser && (
               <TabPane tab={<span>{t('用户消耗趋势')}</span>} itemKey='6' />
             )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('API Key消耗排行')}</span>} itemKey='9' />
+            )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('API Key消耗趋势')}</span>} itemKey='10' />
+            )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('API Key调用次数排行')}</span>} itemKey='11' />
+            )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('API Key调用次数趋势')}</span>} itemKey='12' />
+            )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('API Key Token用量排行')}</span>} itemKey='13' />
+            )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('API Key Token用量趋势')}</span>} itemKey='14' />
+            )}
           </Tabs>
         </div>
       }
@@ -96,6 +120,24 @@ const ChartsPanel = ({
         )}
         {activeChartTab === '6' && isAdminUser && (
           <VChart spec={spec_user_trend} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '9' && isAdminUser && (
+          <VChart spec={spec_tokenkey_rank} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '10' && isAdminUser && (
+          <VChart spec={spec_tokenkey_trend} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '11' && isAdminUser && (
+          <VChart spec={spec_tokenkey_count_rank} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '12' && isAdminUser && (
+          <VChart spec={spec_tokenkey_count_trend} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '13' && isAdminUser && (
+          <VChart spec={spec_tokenkey_token_rank} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '14' && isAdminUser && (
+          <VChart spec={spec_tokenkey_token_trend} option={CHART_CONFIG} />
         )}
       </div>
     </Card>

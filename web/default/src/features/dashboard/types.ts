@@ -28,6 +28,8 @@ export interface QuotaDataItem {
   username?: string
   model_name?: string
   created_at: number
+  token_id?: number
+  token_name?: string
   token_used?: number
   count?: number
   quota?: number
@@ -210,6 +212,12 @@ export interface UserChartsFilters {
   topUserLimit: number
 }
 
+export interface TokenChartsFilters {
+  timeGranularity: TimeGranularity
+  selectedRange: number
+  topTokenLimit: number
+}
+
 // ============================================================================
 // API Info Types
 // ============================================================================
@@ -249,6 +257,15 @@ export interface ProcessedChartData {
 export interface ProcessedUserChartData {
   spec_user_rank: VChartSpec
   spec_user_trend: VChartSpec
+}
+
+export interface ProcessedTokenChartData {
+  spec_token_rank: VChartSpec
+  spec_token_trend: VChartSpec
+  spec_token_count_rank: VChartSpec
+  spec_token_count_trend: VChartSpec
+  spec_token_token_rank: VChartSpec
+  spec_token_token_trend: VChartSpec
 }
 
 // ============================================================================

@@ -444,3 +444,122 @@ export const processUserData = (data, dataExportDefaultTime, limit = 10) => {
 
   return { rankingData, trendData, topUsers };
 };
+
+// ========== API Key维度数据处理 ==========
+export const processTokenKeyData = (data, dataExportDefaultTime, limit = 10) => {
+  // Resolve token label: prefer token_name from backend, fall back to token_id
+  const getTokenLabel = (item) =>
+    item.token_name || `Key-${item.token_id || 'unknown'}`;
+
+  // Aggregate totals per token for all three metrics
+  const tokenQuotaTotal = new Map();
+  const tokenCountTotal = new Map();
+  const tokenTokenTotal = new Map();
+  data.forEach((item) => {
+    const tokenLabel = getTokenLabel(item);
+    tokenQuotaTotal.set(tokenLabel, (tokenQuotaTotal.get(tokenLabel) || 0) + item.quota);
+    tokenCountTotal.set(tokenLabel, (tokenCountTotal.get(tokenLabel) || 0) + item.count);
+    tokenTokenTotal.set(tokenLabel, (tokenTokenTotal.get(tokenLabel) || 0) + (item.token_used || 0));
+  });
+
+  // Select top N tokens by quota (primary ranking dimension)
+  const sortedByQuota = Array.from(tokenQuotaTotal.entries()).sort((a, b) => b[1] - a[1]);
+  const topTokens = sortedByQuota.slice(0, limit).map(([t]) => t);
+  const topTokenSet = new Set(topTokens);
+
+  // Quota ranking data
+  const rankingData = sortedByQuota.slice(0, limit).map(([tokenLabel, quota]) => ({
+    Token: tokenLabel,
+    Quota: quota,
+  }));
+
+  // Count ranking data (sorted by count, only top tokens)
+  const sortedByCount = topTokens
+    .map((t) => [t, tokenCountTotal.get(t) || 0])
+    .sort((a, b) => b[1] - a[1]);
+  const countRankingData = sortedByCount.map(([tokenLabel, count]) => ({
+    Token: tokenLabel,
+    Count: count,
+  }));
+
+  // Token ranking data (sorted by token_used, only top tokens)
+  const sortedByToken = topTokens
+    .map((t) => [t, tokenTokenTotal.get(t) || 0])
+    .sort((a, b) => b[1] - a[1]);
+  const tokenRankingData = sortedByToken.map(([tokenLabel, tokens]) => ({
+    Token: tokenLabel,
+    Tokens: tokens,
+  }));
+
+  // Time-based trend data for all three metrics
+  const showYear = isDataCrossYear(data.map((item) => item.created_at));
+
+  const timeTokenQuotaMap = new Map();
+  const timeTokenCountMap = new Map();
+  const timeTokenTokenMap = new Map();
+  const allTimePoints = new Set();
+
+  data.forEach((item) => {
+    const timeKey = timestamp2string1(item.created_at, dataExportDefaultTime, showYear);
+    allTimePoints.add(timeKey);
+    const tokenLabel = getTokenLabel(item);
+    if (!topTokenSet.has(tokenLabel)) return;
+
+    // Quota map
+    const qKey = `${timeKey}-${tokenLabel}`;
+    const qPrev = timeTokenQuotaMap.get(qKey) || { quota: 0 };
+    timeTokenQuotaMap.set(qKey, { quota: qPrev.quota + item.quota });
+
+    // Count map
+    const cKey = `${timeKey}-${tokenLabel}`;
+    const cPrev = timeTokenCountMap.get(cKey) || { count: 0 };
+    timeTokenCountMap.set(cKey, { count: cPrev.count + item.count });
+
+    // Token map
+    const tKey = `${timeKey}-${tokenLabel}`;
+    const tPrev = timeTokenTokenMap.get(tKey) || { tokens: 0 };
+    timeTokenTokenMap.set(tKey, { tokens: tPrev.tokens + (item.token_used || 0) });
+  });
+
+  const sortedTimePoints = Array.from(allTimePoints).sort();
+
+  // Quota trend data
+  const trendData = [];
+  sortedTimePoints.forEach((time) => {
+    topTokens.forEach((token) => {
+      const key = `${time}-${token}`;
+      const val = timeTokenQuotaMap.get(key);
+      trendData.push({ Time: time, Token: token, Quota: val?.quota || 0 });
+    });
+  });
+
+  // Count trend data
+  const countTrendData = [];
+  sortedTimePoints.forEach((time) => {
+    topTokens.forEach((token) => {
+      const key = `${time}-${token}`;
+      const val = timeTokenCountMap.get(key);
+      countTrendData.push({ Time: time, Token: token, Count: val?.count || 0 });
+    });
+  });
+
+  // Token trend data
+  const tokenTrendData = [];
+  sortedTimePoints.forEach((time) => {
+    topTokens.forEach((token) => {
+      const key = `${time}-${token}`;
+      const val = timeTokenTokenMap.get(key);
+      tokenTrendData.push({ Time: time, Token: token, Tokens: val?.tokens || 0 });
+    });
+  });
+
+  return {
+    rankingData,
+    trendData,
+    countRankingData,
+    countTrendData,
+    tokenRankingData,
+    tokenTrendData,
+    topTokens,
+  };
+};

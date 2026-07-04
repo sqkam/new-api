@@ -18,6 +18,7 @@ type QuotaData struct {
 	CreatedAt int64  `json:"created_at" gorm:"bigint;index:idx_qdt_created_at,priority:2"`
 	UseGroup  string `json:"use_group" gorm:"index;size:64;default:''"`
 	TokenID   int    `json:"token_id" gorm:"index;default:0"`
+	TokenName string `json:"token_name,omitempty" gorm:"-"`
 	ChannelID int    `json:"channel_id" gorm:"index;default:0"`
 	NodeName  string `json:"node_name" gorm:"index;size:64;default:''"`
 	TokenUsed int    `json:"token_used" gorm:"default:0"`
@@ -168,6 +169,55 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*Quota
 		Group("username, created_at").
 		Find(&quotaDatas).Error
 	return quotaDatas, err
+}
+
+func GetQuotaDataGroupByToken(startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
+	var quotaDatas []*QuotaData
+	err = DB.Table("quota_data").
+		Select("token_id, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
+		Where("created_at >= ? and created_at <= ?", startTime, endTime).
+		Group("token_id, created_at").
+		Find(&quotaDatas).Error
+	if err != nil {
+		return nil, err
+	}
+	return quotaDatas, fillQuotaDataTokenNames(quotaDatas)
+}
+
+func fillQuotaDataTokenNames(rows []*QuotaData) error {
+	tokenIDSet := make(map[int]struct{})
+	tokenIDs := make([]int, 0)
+	for _, row := range rows {
+		if row.TokenID == 0 {
+			continue
+		}
+		if _, ok := tokenIDSet[row.TokenID]; ok {
+			continue
+		}
+		tokenIDSet[row.TokenID] = struct{}{}
+		tokenIDs = append(tokenIDs, row.TokenID)
+	}
+	if len(tokenIDs) == 0 {
+		return nil
+	}
+
+	var tokens []struct {
+		Id   int    `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	if err := DB.Model(&Token{}).Select("id, name").Where("id IN ?", tokenIDs).Find(&tokens).Error; err != nil {
+		return err
+	}
+	tokenNameByID := make(map[int]string, len(tokens))
+	for _, token := range tokens {
+		tokenNameByID[token.Id] = token.Name
+	}
+	for _, row := range rows {
+		if name := tokenNameByID[row.TokenID]; name != "" {
+			row.TokenName = name
+		}
+	}
+	return nil
 }
 
 func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaData []*QuotaData, err error) {

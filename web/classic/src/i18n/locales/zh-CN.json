@@ -3809,6 +3809,12 @@
     "并确认自行承担部署": "并确认自行承担部署",
     "运营和收费行为产生的法律责任": "运营和收费行为产生的法律责任",
     "，": "，",
-    "、": "、"
+    "、": "、",
+    "API Key消耗排行": "API Key消耗排行",
+    "API Key消耗趋势": "API Key消耗趋势",
+    "API Key调用次数排行": "API Key调用次数排行",
+    "API Key调用次数趋势": "API Key调用次数趋势",
+    "API Key Token用量排行": "API Key Token用量排行",
+    "API Key Token用量趋势": "API Key Token用量趋势"
   }
 }

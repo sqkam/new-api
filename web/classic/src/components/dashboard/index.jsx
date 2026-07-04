@@ -95,6 +95,15 @@ const Dashboard = () => {
     }
   };
 
+  const loadTokenKeyData = async () => {
+    if (dashboardData.isAdminUser) {
+      const tokenKeyData = await dashboardData.loadTokenKeyQuotaData();
+      if (tokenKeyData && tokenKeyData.length > 0) {
+        dashboardCharts.updateTokenKeyChartData(tokenKeyData);
+      }
+    }
+  };
+
   const initChart = async () => {
     await dashboardData.loadQuotaData().then((data) => {
       if (data && data.length > 0) {
@@ -102,6 +111,7 @@ const Dashboard = () => {
       }
     });
     await loadUserData();
+    await loadTokenKeyData();
     await dashboardData.loadUptimeData();
   };
 
@@ -111,11 +121,13 @@ const Dashboard = () => {
       dashboardCharts.updateChartData(data);
     }
     await loadUserData();
+    await loadTokenKeyData();
   };
 
   const handleSearchConfirm = async () => {
     await dashboardData.handleSearchConfirm(dashboardCharts.updateChartData);
     await loadUserData();
+    await loadTokenKeyData();
   };
 
   // ========== 数据准备 ==========
@@ -198,6 +210,12 @@ const Dashboard = () => {
             spec_token_rank_bar={dashboardCharts.spec_token_rank_bar}
             spec_user_rank={dashboardCharts.spec_user_rank}
             spec_user_trend={dashboardCharts.spec_user_trend}
+            spec_tokenkey_rank={dashboardCharts.spec_tokenkey_rank}
+            spec_tokenkey_trend={dashboardCharts.spec_tokenkey_trend}
+            spec_tokenkey_count_rank={dashboardCharts.spec_tokenkey_count_rank}
+            spec_tokenkey_count_trend={dashboardCharts.spec_tokenkey_count_trend}
+            spec_tokenkey_token_rank={dashboardCharts.spec_tokenkey_token_rank}
+            spec_tokenkey_token_trend={dashboardCharts.spec_tokenkey_token_trend}
             isAdminUser={dashboardData.isAdminUser}
             CARD_PROPS={CARD_PROPS}
             CHART_CONFIG={CHART_CONFIG}

@@ -4912,7 +4912,15 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "API Key Analytics": "API Key Analytics",
+    "API Key Consumption Ranking": "API Key Consumption Ranking",
+    "API Key Consumption Trend": "API Key Consumption Trend",
+    "Top API Keys": "Top API Keys",
+    "API Key Request Count Ranking": "API Key Request Count Ranking",
+    "API Key Request Count Trend": "API Key Request Count Trend",
+    "API Key Token Usage Ranking": "API Key Token Usage Ranking",
+    "API Key Token Usage Trend": "API Key Token Usage Trend"
   },
   "Effort downgrade": "Effort downgrade",
   "Downgrade non-standard reasoning_effort values (e.g. max→high) for upstream compatibility": "Downgrade non-standard reasoning_effort values (e.g. max→high) for upstream compatibility"

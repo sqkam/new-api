@@ -4912,7 +4912,15 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "API Key Analytics": "API Key 统计",
+    "API Key Consumption Ranking": "API Key 消耗排行",
+    "API Key Consumption Trend": "API Key 消耗趋势",
+    "Top API Keys": "热门 API Key",
+    "API Key Request Count Ranking": "API Key 调用次数排行",
+    "API Key Request Count Trend": "API Key 调用次数趋势",
+    "API Key Token Usage Ranking": "API Key Token 用量排行",
+    "API Key Token Usage Trend": "API Key Token 用量趋势"
   },
   "Effort downgrade": "推理力度降级",
   "Downgrade non-standard reasoning_effort values (e.g. max→high) for upstream compatibility": "将非标准 reasoning_effort 值（如 max→high）降级为上游支持的标准值"

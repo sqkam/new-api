@@ -35,6 +35,7 @@ import {
   updateMapValue,
   initializeMaps,
   processUserData,
+  processTokenKeyData,
 } from '../../helpers/dashboard';
 
 const USER_COLORS = [
@@ -495,6 +496,195 @@ export const useDashboardCharts = (
     color: { type: 'ordinal', range: USER_COLORS },
   });
 
+  // ========== Admin: API Key消耗排行 ==========
+  const [spec_tokenkey_rank, setSpecTokenKeyRank] = useState({
+    type: 'bar',
+    data: [{ id: 'tokenKeyRankData', values: [] }],
+    xField: 'rawQuota',
+    yField: 'Token',
+    seriesField: 'Token',
+    direction: 'horizontal',
+    legends: { visible: false },
+    title: {
+      visible: true,
+      text: t('API Key消耗排行'),
+      subtext: '',
+    },
+    bar: {
+      state: { hover: { stroke: '#000', lineWidth: 1 } },
+    },
+    label: {
+      visible: true,
+      position: 'outside',
+      formatMethod: (value, datum) => renderQuota(datum['rawQuota'] || 0, 2),
+    },
+    axes: [{
+      orient: 'left',
+      type: 'band',
+      label: { visible: true },
+    }, {
+      orient: 'bottom',
+      type: 'linear',
+      visible: false,
+    }],
+    tooltip: {
+      mark: {
+        content: [{
+          key: (datum) => datum['Token'],
+          value: (datum) => renderQuota(datum['rawQuota'] || 0, 4),
+        }],
+      },
+    },
+    color: { type: 'ordinal', range: USER_COLORS },
+  });
+
+  // ========== Admin: API Key消耗趋势 ==========
+  const [spec_tokenkey_trend, setSpecTokenKeyTrend] = useState({
+    type: 'area',
+    data: [{ id: 'tokenKeyTrendData', values: [] }],
+    xField: 'Time',
+    yField: 'rawQuota',
+    seriesField: 'Token',
+    stack: false,
+    legends: { visible: true, selectMode: 'single' },
+    title: {
+      visible: true,
+      text: t('API Key消耗趋势'),
+      subtext: '',
+    },
+    axes: [{
+      orient: 'left',
+      label: {
+        formatMethod: (value) => renderQuota(value, 2),
+      },
+    }],
+    area: { style: { fillOpacity: 0.15 } },
+    line: { style: { lineWidth: 2 } },
+    point: { visible: false },
+    tooltip: {
+      mark: {
+        content: [{
+          key: (datum) => datum['Token'],
+          value: (datum) => renderQuota(datum['rawQuota'] || 0, 4),
+        }],
+      },
+      dimension: {
+        content: [{
+          key: (datum) => datum['Token'],
+          value: (datum) => datum['rawQuota'] || 0,
+        }],
+        updateContent: (array) => {
+          array.sort((a, b) => b.value - a.value);
+          let sum = 0;
+          for (let i = 0; i < array.length; i++) {
+            let value = parseFloat(array[i].value);
+            if (isNaN(value)) value = 0;
+            sum += value;
+            array[i].value = renderQuota(value, 4);
+          }
+          array.unshift({
+            key: t('总计'),
+            value: renderQuota(sum, 4),
+          });
+          return array;
+        },
+      },
+    },
+    color: { type: 'ordinal', range: USER_COLORS },
+  });
+
+  // ========== Admin: API Key调用次数排行 ==========
+  const [spec_tokenkey_count_rank, setSpecTokenKeyCountRank] = useState({
+    type: 'bar',
+    data: [{ id: 'tokenKeyCountRankData', values: [] }],
+    xField: 'Count',
+    yField: 'Token',
+    seriesField: 'Token',
+    direction: 'horizontal',
+    legends: { visible: false },
+    title: { visible: true, text: t('API Key调用次数排行'), subtext: '' },
+    bar: { state: { hover: { stroke: '#000', lineWidth: 1 } } },
+    label: { visible: true, position: 'outside', formatMethod: (value, datum) => renderNumber(datum['Count'] || 0) },
+    axes: [{ orient: 'left', type: 'band', label: { visible: true } }, { orient: 'bottom', type: 'linear', visible: false }],
+    tooltip: { mark: { content: [{ key: (datum) => datum['Token'], value: (datum) => renderNumber(datum['Count'] || 0) }] } },
+    color: { type: 'ordinal', range: USER_COLORS },
+  });
+
+  // ========== Admin: API Key调用次数趋势 ==========
+  const [spec_tokenkey_count_trend, setSpecTokenKeyCountTrend] = useState({
+    type: 'area',
+    data: [{ id: 'tokenKeyCountTrendData', values: [] }],
+    xField: 'Time',
+    yField: 'Count',
+    seriesField: 'Token',
+    stack: false,
+    legends: { visible: true, selectMode: 'single' },
+    title: { visible: true, text: t('API Key调用次数趋势'), subtext: '' },
+    area: { style: { fillOpacity: 0.15 } },
+    line: { style: { lineWidth: 2 } },
+    point: { visible: false },
+    tooltip: {
+      mark: { content: [{ key: (datum) => datum['Token'], value: (datum) => renderNumber(datum['Count'] || 0) }] },
+      dimension: {
+        content: [{ key: (datum) => datum['Token'], value: (datum) => datum['Count'] || 0 }],
+        updateContent: (array) => {
+          array.sort((a, b) => b.value - a.value);
+          let sum = 0;
+          for (let i = 0; i < array.length; i++) { let value = parseFloat(array[i].value); if (isNaN(value)) value = 0; sum += value; array[i].value = renderNumber(value); }
+          array.unshift({ key: t('总计'), value: renderNumber(sum) });
+          return array;
+        },
+      },
+    },
+    color: { type: 'ordinal', range: USER_COLORS },
+  });
+
+  // ========== Admin: API Key Token用量排行 ==========
+  const [spec_tokenkey_token_rank, setSpecTokenKeyTokenRank] = useState({
+    type: 'bar',
+    data: [{ id: 'tokenKeyTokenRankData', values: [] }],
+    xField: 'Tokens',
+    yField: 'Token',
+    seriesField: 'Token',
+    direction: 'horizontal',
+    legends: { visible: false },
+    title: { visible: true, text: t('API Key Token用量排行'), subtext: '' },
+    bar: { state: { hover: { stroke: '#000', lineWidth: 1 } } },
+    label: { visible: true, position: 'outside', formatMethod: (value, datum) => renderNumber(datum['Tokens'] || 0) },
+    axes: [{ orient: 'left', type: 'band', label: { visible: true } }, { orient: 'bottom', type: 'linear', visible: false }],
+    tooltip: { mark: { content: [{ key: (datum) => datum['Token'], value: (datum) => renderNumber(datum['Tokens'] || 0) }] } },
+    color: { type: 'ordinal', range: USER_COLORS },
+  });
+
+  // ========== Admin: API Key Token用量趋势 ==========
+  const [spec_tokenkey_token_trend, setSpecTokenKeyTokenTrend] = useState({
+    type: 'area',
+    data: [{ id: 'tokenKeyTokenTrendData', values: [] }],
+    xField: 'Time',
+    yField: 'Tokens',
+    seriesField: 'Token',
+    stack: false,
+    legends: { visible: true, selectMode: 'single' },
+    title: { visible: true, text: t('API Key Token用量趋势'), subtext: '' },
+    area: { style: { fillOpacity: 0.15 } },
+    line: { style: { lineWidth: 2 } },
+    point: { visible: false },
+    tooltip: {
+      mark: { content: [{ key: (datum) => datum['Token'], value: (datum) => renderNumber(datum['Tokens'] || 0) }] },
+      dimension: {
+        content: [{ key: (datum) => datum['Token'], value: (datum) => datum['Tokens'] || 0 }],
+        updateContent: (array) => {
+          array.sort((a, b) => b.value - a.value);
+          let sum = 0;
+          for (let i = 0; i < array.length; i++) { let value = parseFloat(array[i].value); if (isNaN(value)) value = 0; sum += value; array[i].value = renderNumber(value); }
+          array.unshift({ key: t('总计'), value: renderNumber(sum) });
+          return array;
+        },
+      },
+    },
+    color: { type: 'ordinal', range: USER_COLORS },
+  });
+
   // ========== 数据处理函数 ==========
   const generateModelColors = useCallback((uniqueModels, modelColors) => {
     const newModelColors = {};
@@ -774,6 +964,102 @@ export const useDashboardCharts = (
     [dataExportDefaultTime, t],
   );
 
+  // ========== API Key维度图表数据处理 ==========
+  const updateTokenKeyChartData = useCallback(
+    (data) => {
+      const {
+        rankingData,
+        trendData: tokenKeyTrend,
+        countRankingData,
+        countTrendData,
+        tokenRankingData,
+        tokenTrendData,
+      } = processTokenKeyData(data, dataExportDefaultTime, 10);
+
+      const totalTokenKeyQuota = rankingData.reduce((s, i) => s + i.Quota, 0);
+      const totalTokenKeyCount = countRankingData.reduce((s, i) => s + i.Count, 0);
+      const totalTokenKeyTokens = tokenRankingData.reduce((s, i) => s + i.Tokens, 0);
+
+      // Quota rank
+      const tokenKeyRankValues = rankingData.map((item) => ({
+        Token: item.Token,
+        rawQuota: item.Quota,
+        Quota: getQuotaWithUnit(item.Quota, 4),
+      })).sort((a, b) => b.rawQuota - a.rawQuota);
+
+      setSpecTokenKeyRank((prev) => ({
+        ...prev,
+        data: [{ id: 'tokenKeyRankData', values: tokenKeyRankValues }],
+        title: { ...prev.title, subtext: `${t('总计')}：${renderQuota(totalTokenKeyQuota, 2)}` },
+      }));
+
+      // Quota trend
+      const tokenKeyTrendValues = tokenKeyTrend.map((item) => ({
+        Time: item.Time,
+        Token: item.Token,
+        rawQuota: item.Quota,
+        Usage: item.Quota ? getQuotaWithUnit(item.Quota, 4) : 0,
+      }));
+
+      setSpecTokenKeyTrend((prev) => ({
+        ...prev,
+        data: [{ id: 'tokenKeyTrendData', values: tokenKeyTrendValues }],
+        title: { ...prev.title, subtext: `${t('总计')}：${renderQuota(totalTokenKeyQuota, 2)}` },
+      }));
+
+      // Count rank
+      const countRankValues = countRankingData.map((item) => ({
+        Token: item.Token,
+        Count: item.Count,
+      }));
+
+      setSpecTokenKeyCountRank((prev) => ({
+        ...prev,
+        data: [{ id: 'tokenKeyCountRankData', values: countRankValues }],
+        title: { ...prev.title, subtext: `${t('总计')}：${renderNumber(totalTokenKeyCount)}` },
+      }));
+
+      // Count trend
+      const countTrendValues = countTrendData.map((item) => ({
+        Time: item.Time,
+        Token: item.Token,
+        Count: item.Count,
+      }));
+
+      setSpecTokenKeyCountTrend((prev) => ({
+        ...prev,
+        data: [{ id: 'tokenKeyCountTrendData', values: countTrendValues }],
+        title: { ...prev.title, subtext: `${t('总计')}：${renderNumber(totalTokenKeyCount)}` },
+      }));
+
+      // Token rank
+      const tokenRankValues = tokenRankingData.map((item) => ({
+        Token: item.Token,
+        Tokens: item.Tokens,
+      }));
+
+      setSpecTokenKeyTokenRank((prev) => ({
+        ...prev,
+        data: [{ id: 'tokenKeyTokenRankData', values: tokenRankValues }],
+        title: { ...prev.title, subtext: `${t('总计')}：${renderNumber(totalTokenKeyTokens)}` },
+      }));
+
+      // Token trend
+      const tokenTrendValues = tokenTrendData.map((item) => ({
+        Time: item.Time,
+        Token: item.Token,
+        Tokens: item.Tokens,
+      }));
+
+      setSpecTokenKeyTokenTrend((prev) => ({
+        ...prev,
+        data: [{ id: 'tokenKeyTokenTrendData', values: tokenTrendValues }],
+        title: { ...prev.title, subtext: `${t('总计')}：${renderNumber(totalTokenKeyTokens)}` },
+      }));
+    },
+    [dataExportDefaultTime, t],
+  );
+
   // ========== 初始化图表主题 ==========
   useEffect(() => {
     initVChartSemiTheme({
@@ -790,8 +1076,15 @@ export const useDashboardCharts = (
     spec_token_rank_bar,
     spec_user_rank,
     spec_user_trend,
+    spec_tokenkey_rank,
+    spec_tokenkey_trend,
+    spec_tokenkey_count_rank,
+    spec_tokenkey_count_trend,
+    spec_tokenkey_token_rank,
+    spec_tokenkey_token_trend,
     updateChartData,
     updateUserChartData,
+    updateTokenKeyChartData,
     generateModelColors,
   };
 };
