@@ -1,6 +1,6 @@
 # SQKAM Branch — 自定义功能说明
 
-> 最后更新: 2026-06-28（redis RDB 持久化 + 子网改为 172.22.0.0/16）
+> 最后更新: 2026-07-04（新增渠道级别 reasoning_effort 降级开关）
 > 当前基准: `sqkam` 已合并至 `origin/main` commit `d10fc762`
 > 最新 main: `origin/main` commit `d10fc762`
 > 同步状态: 2026-06-27 已执行 `git fetch origin main` 和 `git merge origin/main`；冲突文件为 `docker-compose.yml`、`makefile`、`web/classic/bun.lock`。`docker-compose.yml` 保留 sqkam 精简版（SQLite + redis + `sqkam/new-api` 镜像 + IPv6 网络）；`makefile` 保留 sqkam 的 build/docker 目标与 `sqkam/new-api` 镜像名，接入 main 的共享 `web` workspace 安装方式；`web/classic/bun.lock` 按 main 删除（已迁移到共享 `web/bun.lock`）。
@@ -212,6 +212,59 @@ make container-image
 - 公网服务器上 `xianyu-auto-reply-fix_xianyu-network` 占用 `172.20.0.0/16`，与原配置冲突
 - 改为 `172.22.0.0/16`，内网服务器无此冲突但统一配置
 
+### 10. 渠道级别 reasoning_effort 降级 (Effort Downgrade)
+
+**问题背景:** 部分上游（如 MaaS/SGLang）不支持非标准 `reasoning_effort` 值（如 `max`、`xhigh`），只接受 `low`/`medium`/`high`，收到非标准值会返回 400 错误。而 400 状态码不触发自动重试，导致基于重试的降级逻辑永远不会执行。
+
+**解决方案:** 在 `ChannelOtherSettings` 中新增 `EffortDowngradeEnabled` 开关，开启后**首次请求前主动降级**非标准 effort 值，不依赖上游报错或重试。
+
+**降级规则:**
+
+| 输入值 | 降级为 |
+|--------|--------|
+| `max` | `high` |
+| `xhigh` | `high` |
+| `minimal` | `low` |
+| 其他非标准值 | `high` |
+| `low`/`medium`/`high` | 不变 |
+
+**后端核心文件:**
+
+| 文件 | 说明 |
+|------|------|
+| `dto/channel_settings.go` | `ChannelOtherSettings` 新增 `EffortDowngradeEnabled bool`（JSON: `effort_downgrade_enabled`） |
+| `setting/reasoning/suffix.go` | `DowngradeReasoningEffort()` 降级函数、`IsReasoningEffortValidationError()` 错误识别函数 |
+| `setting/reasoning/suffix_test.go` | 18 个单元测试 |
+| `relay/claude_handler.go` | ClaudeHelper 3 处降级点：TrimEffortSuffix 结果、OutputConfig.effort、passthrough 请求体 |
+| `relay/channel/claude/adaptor.go` | Claude adaptor 2 处降级点：ReasoningEffort、模型名后缀 |
+| `relay/channel/openai/adaptor.go` | OpenAI adaptor 2 处降级点：OpenRouter 路径、O系列/GPT5 路径 |
+| `relay/channel/aws/adaptor.go` | AWS adaptor 2 处降级点：ReasoningEffort、模型名后缀 |
+| `relay/channel/vertex/adaptor.go` | Vertex adaptor 2 处降级点：ReasoningEffort、模型名后缀 |
+| `relay/channel/deepseek/adaptor.go` | DeepSeek adaptor 2 处降级点：OpenAI 路径 ReasoningEffort、Claude 路径 OutputConfig.effort |
+| `relay/compatible_handler.go` | passthrough 请求体 reasoning_effort 降级 |
+| `relay/channel/claude/relay-claude.go` | TrimEffortSuffix 处理（降级由上层 adaptor/claude_handler 负责） |
+
+**前端文件:**
+
+| 文件 | 说明 |
+|------|------|
+| `web/classic/.../EditChannelModal.jsx` | type=14 渠道编辑页面"额外设置"区域新增"推理力度降级"开关 |
+| `web/default/.../channel-mutate-drawer.tsx` | type=14 渠道编辑抽屉新增"Effort downgrade"开关 |
+| `web/default/.../channel-form.ts` | zod schema + 默认值（false）+ 解析/构建 JSON |
+| `web/default/src/i18n/locales/en.json` | 英文翻译 |
+| `web/default/src/i18n/locales/zh.json` | 中文翻译 |
+
+**行为:**
+- 默认关闭，需在渠道编辑页面手动开启
+- 仅对 Anthropic Claude (type=14) 渠道显示开关
+- 开启后，所有经过该渠道的请求中的非标准 effort 值会在发送上游前被降级
+- 降级日志：`proactively downgrading ... for upstream compatibility`
+
+**使用场景示例:**
+- 渠道指向 MaaS（内部用 SGLang），SGLang 只支持 `low`/`medium`/`high`
+- 用户请求 `deepseek-v4-pro-max` 或设置 `output_config.effort: "max"`
+- 开启开关后，`max` 自动降级为 `high`，避免 400 错误
+
 ---
 
 ## 后续合并 main 的注意事项
@@ -285,6 +338,15 @@ sqkam 分支的前端基于 `web/classic/`（React 18 + Semi Design），**不�
 | `web/classic/.../useDashboardCharts.jsx` | **中** | Dashboard 图表规格 |
 | `web/default/src/features/keys/types.ts` | **中** | apiKeySchema 透传字段（2026-06-28） |
 | `web/default/src/features/keys/components/api-keys-mutate-drawer.tsx` | **中** | fetchedTokenRef 透传逻辑（2026-06-28） |
+| `dto/channel_settings.go` | **中** | ChannelOtherSettings 新增 EffortDowngradeEnabled（2026-07-04） |
+| `setting/reasoning/suffix.go` | **低** | 仅 sqkam 有（2026-07-04 新增） |
+| `relay/claude_handler.go` | **中** | effort 降级逻辑（3 处） |
+| `relay/channel/claude/adaptor.go` | **中** | effort 降级逻辑（2 处） |
+| `relay/channel/deepseek/adaptor.go` | **中** | effort 降级逻辑（2 处） |
+| `relay/compatible_handler.go` | **低** | passthrough reasoning_effort 降级 |
+| `web/classic/.../EditChannelModal.jsx` | **中** | effort_downgrade_enabled 开关（2026-07-04） |
+| `web/default/.../channel-mutate-drawer.tsx` | **中** | effort_downgrade_enabled 开关（2026-07-04） |
+| `web/default/.../channel-form.ts` | **中** | effort_downgrade_enabled schema/默认值/transform（2026-07-04） |
 
 ---
 
@@ -312,6 +374,11 @@ rg -c "rate_limit" web/classic/src/components/table/tokens/modals/EditTokenModal
 rg -c "loadedTokenRef" web/classic/src/components/table/tokens/modals/EditTokenModal.jsx  # 应 >= 3（2026-06-28 回填修复）
 rg -c "spec_token" web/classic/src/hooks/dashboard/useDashboardCharts.jsx  # 应 >= 4
 test -f web/classic/src/helpers/token.js     # 应存在
-rg -c "fetchedTokenRef" web/default/src/features/keys/components/api-keys-mutate-drawer.tsx  # 应 >= 2（2026-06-28 后）
-rg -c "rate_limit_enabled" web/default/src/features/keys/types.ts  # 应 >= 2（2026-06-28 后）
+# Effort 降级功能（2026-07-04）
+rg -n "EffortDowngradeEnabled" dto/channel_settings.go  # 应存在
+rg -c "EffortDowngradeEnabled" relay/claude_handler.go  # 应 >= 3
+rg -c "EffortDowngradeEnabled" relay/channel/claude/adaptor.go  # 应 >= 2
+rg -c "DowngradeReasoningEffort" setting/reasoning/suffix.go  # 应 >= 2（函数定义+调用）
+rg -c "effort_downgrade_enabled" web/classic/src/components/table/channels/modals/EditChannelModal.jsx  # 应 >= 5
+rg -c "effort_downgrade_enabled" web/default/src/features/channels/lib/channel-form.ts  # 应 >= 4
 ```
