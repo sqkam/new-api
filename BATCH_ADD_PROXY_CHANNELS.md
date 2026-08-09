@@ -126,6 +126,45 @@ ssh root@hk.sqkam2.top 'cp /root/new-api-sqkam/data/one-api.db.bak.<timestamp> /
 ssh root@hk.sqkam2.top 'cd /root/new-api-sqkam && docker compose start new-api'
 ```
 
+## ⚠️ 已知坑：`channel_info` 必须存为 BLOB（TEXT 会导致渠道列表打不开）
+
+**现象**：用 SQL 字面量插入新渠道后，渠道管理页面报「获取渠道列表失败，请稍后重试」，同时日志每分钟出现：
+
+```
+sql: Scan error on column index 28, name "channel_info": unexpected end of JSON input
+```
+
+**根因**：Go 模型 `model.ChannelInfo` 的 `Scan()` 只接受 `[]byte`：
+
+```go
+// model/channel.go
+func (c *ChannelInfo) Scan(value interface{}) error {
+	bytesValue, _ := value.([]byte)   // ← TEXT 传入时断言失败，bytesValue 为 nil
+	return common.Unmarshal(bytesValue, c)
+}
+```
+
+正常渠道（GORM `Value()` 写入）在 SQLite 中该列存的是 **BLOB**；而 `INSERT` 用字符串字面量时 SQLite 会存成 **TEXT**，`value.([]byte)` 断言失败拿到 nil → 反序列化报 `unexpected end of JSON input` → 整条 `SELECT * FROM channels` 扫描失败，渠道列表接口直接 500/报错。
+
+**判断依据**：`SELECT id, typeof(channel_info) FROM channels;` —— 正常行是 `blob`，出问题的行是 `text`。
+
+**修复（无需重启，缓存 60s 自动重同步）**：
+
+```sql
+UPDATE channels SET channel_info = CAST(channel_info AS BLOB) WHERE id IN (<受影响id列表>);
+```
+
+**预防**：后续插入必须把 `channel_info` 显式存成 BLOB，两种写法任选：
+
+```sql
+-- 写法1：CAST
+CAST('{"is_multi_key":false,...}' AS BLOB)
+-- 写法2：从模板行二进制复制
+SELECT CAST(channel_info AS BLOB) FROM channels WHERE id=<TMPL_ID>
+```
+
+注意：Go 脚本方式（`sqlite3` + `json.dumps`）用 `INSERT ... VALUES (?,...)` 传 str 同样会存成 TEXT，需改成传 `bytes`（`json.dumps(...).encode()`）或对 `channel_info` 列单独 `CAST AS BLOB`。
+
 ## 关键字段说明（对应源码）
 
 | 数据库字段 | Go 结构 / 文件 | 说明 |
